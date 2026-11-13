@@ -331,7 +331,7 @@ async function apriPost(aperto){
 async function avvisaPost(primaVolta){
   toast('Invio notifiche…');
   try {
-    const { data, error } = await sb.functions.invoke('notifica-post', { body: { data: cur } });
+    const { data, error } = await sb.functions.invoke('Notifica-post', { body: { data: cur } });
     if (error) throw error;
     toast((primaVolta ? 'POST aperto · ' : '') + (data.atleti ? 'notifica inviata a ' + data.atleti + (data.atleti === 1 ? ' atleta' : ' atleti') : 'nessun atleta con notifiche attive da avvisare'));
   } catch (e) {
