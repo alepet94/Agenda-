@@ -191,7 +191,7 @@ async function load(){
     pre_at: r.pre_at, post_at: r.post_at, staff_at: r.staff_at
   }));
   const idx = {}; righe.forEach(r => idx[r.data + '|' + r.id] = r);
-  const prog = {}; p.data.forEach(x => prog[x.data] = { tipo: x.tipo, rpe: num(x.rpe_obiettivo), postAperto: x.post_aperto_at });
+  const prog = {}; p.data.forEach(x => prog[x.data] = { tipo: x.tipo, rpe: num(x.rpe_obiettivo), postAperto: x.post_aperto_at, inizio: (x.ora_inizio || '').slice(0, 5), fine: (x.ora_fine || '').slice(0, 5) });
   const push = new Set((ps.data || []).map(x => x.atleta_id));
   D = { oggi, atleti: a.data.map(x => Object.assign(x, { link: ATLETA_URL + '?a=' + encodeURIComponent(x.id) + '&t=' + x.token })), righe, idx, prog, push };
   if (!cur) cur = oggi;
@@ -315,12 +315,16 @@ function pannelloPost(G){
     <div><h2>${ap ? '🔓 POST aperto' : '🔒 POST chiuso'}</h2>
       <div class="sub" style="margin-top:4px">${ap
         ? `Aperto alle ${ora} · mancano ${daFare.length} POST (${conNotifica} con notifiche attive)`
-        : passato ? 'Giornata passata: gli atleti possono compilare solo oggi e ieri.' : 'Gli atleti vedono solo il PRE. Aprilo a fine allenamento: chi ha attivato le notifiche riceve l\'avviso.'}</div></div>
+        : passato ? 'Giornata passata: gli atleti possono compilare solo oggi e ieri.'
+        : G.p.tipo === 'RIPOSO' ? 'Giornata di riposo: nessuna notifica automatica.'
+        : G.p.fine ? `Allenamento ${G.p.inizio || '?'}–${G.p.fine}: si apre da solo alle <b>${autoPost(G.p.fine)}</b> e avvisa i presenti. Puoi anche aprirlo prima.`
+        : 'Imposta l\'orario in Programmazione per l\'apertura automatica, oppure aprilo tu a fine allenamento.'}</div></div>
     <div class="row">${ap
       ? `<button class="btn ghost" onclick="avvisaPost()" ${daFare.length ? '' : 'disabled'}>Avvisa di nuovo</button><button class="btn ghost" onclick="apriPost(false)">Richiudi</button>`
       : `<button class="btn acc" onclick="apriPost(true)" ${passato ? 'disabled' : ''}>Apri POST e avvisa gli atleti</button>`}</div>
   </div></div>`;
 }
+const autoPost = f => { const [h, m] = f.split(':').map(Number), x = h * 60 + m - 20; return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0'); };
 async function apriPost(aperto){
   const { error } = await sb.rpc('apri_post', { p_data: cur, p_aperto: aperto });
   if (error) return toast('Errore: ' + error.message);
@@ -428,19 +432,21 @@ function vProg(){
   const tipi = ['ALLENAMENTO', 'PARTITA', 'RIPOSO'];
   $('#app').innerHTML = `
   ${datebar('Settimane dal ' + dLabel(lun, { day: 'numeric', month: 'long' }), 7)}
-  <div class="panel"><div class="scroll"><table><tr><th>Giorno</th><th>Tipo giornata</th><th>RPE obiettivo</th><th>RPE medio squadra</th><th>Differenza</th><th></th></tr>
+  <div class="panel"><div class="scroll"><table><tr><th>Giorno</th><th>Tipo giornata</th><th>Inizio</th><th>Fine</th><th>RPE obiettivo</th><th>RPE medio squadra</th><th>Differenza</th><th></th></tr>
   ${days.map(k => { const p = D.prog[k] || {}; const m = avg(D.righe.filter(r => r.data === k && num(r.rpe) != null).map(r => +r.rpe));
     const df = m != null && p.rpe != null ? m - p.rpe : null;
     return `<tr><td class="nm">${cap(dLabel(k, { weekday: 'short', day: 'numeric', month: 'short' }))}</td>
       <td><select id="t_${k}"><option></option>${tipi.map(t => `<option ${t === p.tipo ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
+      <td><input type="time" id="i_${k}" value="${p.inizio || ''}"></td>
+      <td><input type="time" id="f_${k}" value="${p.fine || ''}" title="Il POST si apre da solo 20' prima"></td>
       <td><input class="num" type="number" min="0" max="10" step="0.5" id="r_${k}" value="${p.rpe ?? ''}"></td>
       <td>${fmtN(m, 1)}</td><td>${df == null ? '–' : `<span class="c ${Math.abs(df) > 1.5 ? 'r' : Math.abs(df) > 0.75 ? 'y' : 'g'}">${df >= 0 ? '+' : ''}${fmtN(df, 1)}</span>`}</td>
       <td><button class="btn ghost" onclick="saveProg('${k}')">Salva</button></td></tr>`; }).join('')}
   </table></div></div>`;
 }
 async function saveProg(k){
-  const t = $('#t_' + k).value || null, r = $('#r_' + k).value;
-  const { error } = await sb.from('programmazione').upsert({ data: k, tipo: t, rpe_obiettivo: r === '' ? null : +r });
+  const t = $('#t_' + k).value || null, r = $('#r_' + k).value, i = $('#i_' + k).value || null, f = $('#f_' + k).value || null;
+  const { error } = await sb.from('programmazione').upsert({ data: k, tipo: t, rpe_obiettivo: r === '' ? null : +r, ora_inizio: i, ora_fine: f });
   if (error) return toast('Errore: ' + error.message);
   toast('Programmazione salvata'); load();
 }
