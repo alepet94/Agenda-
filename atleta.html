@@ -5,6 +5,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#f4f1ec">
 <title>Agenda · Monitoraggio</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
 <meta charset="utf-8">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -68,6 +71,22 @@
   .toast.show{opacity:1}
   .hidden{display:none}
   .loading{color:var(--mute);text-align:center;padding:40px}
+  .steps{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+  .step{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 16px}
+  .step .k{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+  .step .t{font-size:20px;font-weight:800;margin-top:2px}
+  .step .s{font-size:13px;margin-top:6px;color:var(--mute)}
+  .step.now{background:var(--ink);border-color:var(--ink);color:#fff}
+  .step.now .k,.step.now .s{color:#c9ccd3}
+  .step.ok .s{color:var(--ok);font-weight:600}
+  .step.lock{opacity:.55}
+  .wait-box{text-align:center;padding:30px 18px}
+  .wait-box .big{width:64px;height:64px;border-radius:50%;background:var(--acc-soft);color:var(--acc);
+       display:grid;place-items:center;margin:0 auto 14px;font-size:28px}
+  .notif{display:flex;gap:12px;align-items:center;text-align:left;background:#faf8f5;border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-top:16px}
+  .notif p{margin:0;font-size:13.5px;line-height:1.4;flex:1}
+  .notif .btn{border:0;border-radius:10px;background:var(--acc);color:#fff;font:inherit;font-weight:700;padding:10px 12px;cursor:pointer;white-space:nowrap}
+  .notif.on{background:var(--ok-soft);border-color:#bfe6d0}
 </style>
 </head>
 <body>
@@ -78,14 +97,7 @@
     <div class="days" id="days"></div>
   </header>
 
-  <div class="tabs">
-    <button class="tab on" id="tabPre" onclick="show('pre')">
-      <div class="k">Prima</div><div class="t">PRE</div><div class="s" id="sPre">Da compilare</div>
-    </button>
-    <button class="tab" id="tabPost" onclick="show('post')">
-      <div class="k">Dopo</div><div class="t">POST</div><div class="s" id="sPost">Da compilare</div>
-    </button>
-  </div>
+  <div class="steps" id="steps"></div>
 
   <div id="loading" class="loading">Caricamento…</div>
 
@@ -114,6 +126,14 @@
     <button class="send" id="sendPre" onclick="sendPre()" disabled>Invia PRE</button>
   </section>
 
+  <!-- ATTESA: PRE fatto, POST non ancora aperto -->
+  <section id="wait" class="hidden card wait-box">
+    <div class="big">⏳</div>
+    <div class="q">PRE inviato, buon allenamento!</div>
+    <div class="hint" style="justify-content:center;margin-top:6px">Il POST si apre a fine allenamento, quando lo sblocca il preparatore.</div>
+    <div class="notifBox"></div>
+  </section>
+
   <!-- POST -->
   <section id="post" class="hidden">
     <div class="card"><div class="q">Quanto è stata dura la giornata?</div>
@@ -125,9 +145,10 @@
 
   <section id="done" class="hidden card done-box">
     <div class="big">✓</div>
-    <div class="q" id="doneTxt">Inviato</div>
-    <div class="hint" style="justify-content:center;margin-top:6px">Grazie! Lo staff lo vede subito.</div>
+    <div class="q" id="doneTxt">Fatto</div>
+    <div class="hint" style="justify-content:center;margin-top:6px" id="doneSub">Grazie! Lo staff lo vede subito.</div>
     <div class="hint" style="justify-content:center;margin-top:14px">Hai sbagliato qualcosa? Avvisa lo staff: può correggerlo lui.</div>
+    <div class="notifBox"></div>
   </section>
 </div>
 <div class="toast" id="toast"></div>
@@ -138,8 +159,13 @@ const SUPABASE_URL = 'https://civadhuwyvkxswmbfqrb.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_VUgeMxn_e5ob9PyIrODNVQ_wHxpQJ41';  // chiave publishable (pubblica)
 /* ======================================================================== */
 
+const VAPID_PUBLIC = 'BK6sHnHHlQkLkp6BBv98ZxJSngGMf9hiuf1rj9rzZ1TGWHzdteoRsW5BzBFz4gzo3fZtzPF-a138AX_PcC3qgDA';
+
+/* ---------- identità atleta (dal link, poi ricordata sul telefono) ---------- */
 const Q = new URLSearchParams(location.search);
-const ID = (Q.get('a') || '').toUpperCase(), TOK = Q.get('t') || '';
+const mem = { get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }, set(k, v){ try { localStorage.setItem(k, v); } catch(e){} } };
+let ID = (Q.get('a') || mem.get('agenda_a') || '').toUpperCase(), TOK = Q.get('t') || mem.get('agenda_t') || '';
+if (Q.get('a') && Q.get('t')) { mem.set('agenda_a', ID); mem.set('agenda_t', TOK); }
 
 async function rpc(fn, args){
   const r = await fetch(SUPABASE_URL + '/rest/v1/rpc/' + fn, {
@@ -152,9 +178,12 @@ async function rpc(fn, args){
   return j;
 }
 const pid = () => ({ p_id: ID, p_token: TOK });
+
 const RPE_TXT = ['Riposo','Molto, molto facile','Facile','Moderata','Un po\' dura','Dura','Dura +','Molto dura','Molto dura +','Quasi massimale','Massimale'];
 const DISP = [['Disponibile','#1f9d62'],['Disponibile con limitazioni','#c98a0b'],['Infortunato','#d23c3c'],['Ammalato','#7a5bd0']];
-let S = { sonnoH: 8 }, P = {}, state = null, day = null, view = 'pre', forceForm = false;
+const ND = ['Infortunato', 'Ammalato'];
+let S = { sonnoH: 8 }, P = {}, state = null, day = null;
+const $ = id => document.getElementById(id);
 
 // costruzione scale
 document.querySelectorAll('.scale').forEach(el => {
@@ -164,77 +193,146 @@ document.querySelectorAll('.scale').forEach(el => {
     bt.onclick = () => {
       el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === bt));
       (k === 'rpe' ? P : S)[k] = i;
-      if (k === 'rpe') document.getElementById('rpeLabel').textContent = RPE_TXT[i];
+      if (k === 'rpe') $('rpeLabel').textContent = RPE_TXT[i];
       check();
     };
     el.appendChild(bt);
   }
 });
 DISP.forEach(([t, c]) => {
-  const bt = document.createElement('button'); bt.innerHTML = `<i style="background:${c}"></i>${t}`;
+  const bt = document.createElement('button');
+  const dot = document.createElement('i'); dot.style.background = c;
+  bt.append(dot, t);
   bt.onclick = () => { document.querySelectorAll('#disp button').forEach(x => x.classList.toggle('on', x === bt)); S.disp = t; check(); };
-  document.getElementById('disp').appendChild(bt);
+  $('disp').appendChild(bt);
 });
 
-function ore(d){ S.sonnoH = Math.min(14, Math.max(0, S.sonnoH + d)); document.getElementById('oreVal').innerHTML = String(S.sonnoH).replace('.', ',') + '<small> h</small>'; }
+function ore(d){ S.sonnoH = Math.min(14, Math.max(0, S.sonnoH + d)); $('oreVal').innerHTML = String(S.sonnoH).replace('.', ',') + '<small> h</small>'; }
 function check(){
-  document.getElementById('sendPre').disabled = !['tqr','sonnoQ','doms','stress','disp'].every(k => S[k] != null);
-  document.getElementById('sendPost').disabled = P.rpe == null;
+  $('sendPre').disabled = !['tqr','sonnoQ','doms','stress','disp'].every(k => S[k] != null);
+  $('sendPost').disabled = P.rpe == null;
 }
 function fmt(k){ const d = new Date(k + 'T12:00:00'); return d.toLocaleDateString('it-IT', { weekday:'short', day:'numeric', month:'short' }); }
+function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 2800); }
 
 function renderDays(){
-  const box = document.getElementById('days'); box.innerHTML = '';
+  const box = $('days'); box.innerHTML = '';
   [[state.oggi,'Oggi'],[state.ieri,'Ieri']].forEach(([k, l]) => {
     const b = document.createElement('button'); b.className = 'day' + (k === day ? ' on' : '');
-    b.innerHTML = `<small>${l}</small><b>${fmt(k)}</b>`;
-    b.onclick = () => { day = k; forceForm = false; renderDays(); render(); };
+    const sm = document.createElement('small'); sm.textContent = l;
+    const bb = document.createElement('b'); bb.textContent = fmt(k);
+    b.append(sm, bb);
+    b.onclick = () => { day = k; renderDays(); render(); };
     box.appendChild(b);
   });
 }
-function render(){
-  const st = state.stato[day];
-  const set = (id, done) => { document.getElementById(id).textContent = done ? 'Compilato ✓' : 'Da compilare'; };
-  set('sPre', st.pre); set('sPost', st.post);
-  document.getElementById('tabPre').className = 'tab' + (view === 'pre' ? ' on' : '') + (st.pre ? ' done' : '');
-  document.getElementById('tabPost').className = 'tab' + (view === 'post' ? ' on' : '') + (st.post ? ' done' : '');
-  const fatto = st[view] && !forceForm;
-  document.getElementById('pre').classList.toggle('hidden', view !== 'pre' || fatto);
-  document.getElementById('post').classList.toggle('hidden', view !== 'post' || fatto);
-  document.getElementById('done').classList.toggle('hidden', !fatto);
-  document.getElementById('doneTxt').textContent = (view === 'pre' ? 'PRE' : 'POST') + ' inviato per ' + fmt(day);
-}
-function show(v){ view = v; forceForm = false; render(); }
-function toast(t){ const el = document.getElementById('toast'); el.textContent = t; el.classList.add('show'); setTimeout(() => el.classList.remove('show'), 2200); }
 
+/* Fase della giornata: pre → attesa → post → fatto */
+function fase(st){
+  if (!st.pre) return 'pre';
+  if (ND.includes(st.disp)) return 'done';
+  if (st.post) return 'done';
+  return st.post_aperto ? 'post' : 'wait';
+}
+function render(){
+  const st = state.stato[day], f = fase(st);
+  const nd = ND.includes(st.disp);
+  const step = (cls, k, t, s) => `<div class="step ${cls}"><div class="k">${k}</div><div class="t">${t}</div><div class="s">${s}</div></div>`;
+  $('steps').innerHTML =
+    step(st.pre ? 'ok' : 'now', 'Prima', 'PRE', st.pre ? 'Compilato ✓' : 'Da compilare') +
+    step(st.post ? 'ok' : f === 'post' ? 'now' : 'lock', 'Dopo', 'POST',
+      st.post ? 'Compilato ✓' : nd ? 'Non richiesto' : st.post_aperto ? 'Da compilare' : '🔒 A fine allenamento');
+  ['pre', 'wait', 'post', 'done'].forEach(x => $(x).classList.toggle('hidden', x !== f));
+  if (f === 'done') {
+    $('doneTxt').textContent = nd ? 'PRE inviato · ' + fmt(day) : 'Giornata completa · ' + fmt(day);
+    $('doneSub').textContent = nd ? 'Sei segnato come ' + st.disp.toLowerCase() + ': il POST non serve. Rimettiti presto!' : 'PRE e POST inviati. Grazie!';
+  }
+  renderNotif();
+}
+
+/* ---------- notifiche push ---------- */
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function renderNotif(){
+  let html;
+  if (state.push && pushOk() && Notification.permission === 'granted') {
+    html = '<div class="notif on"><p>🔔 <b>Notifiche attive.</b> Ti avvisiamo quando si apre il POST.</p></div>';
+  } else if (isIOS && !standalone()) {
+    html = '<div class="notif"><p>🔔 <b>Vuoi la notifica quando si apre il POST?</b><br>Tocca <b>Condividi</b> ⬆︎ › <b>Aggiungi alla schermata Home</b>, poi apri Agenda dall\'icona e attiva le notifiche.</p></div>';
+  } else if (!pushOk()) {
+    html = '<div class="notif"><p>Questo browser non supporta le notifiche: riapri il link a fine allenamento.</p></div>';
+  } else if (Notification.permission === 'denied') {
+    html = '<div class="notif"><p>Notifiche bloccate. Riattivale dalle impostazioni del telefono per questo sito.</p></div>';
+  } else {
+    html = '<div class="notif"><p>🔔 <b>Ricevi un avviso</b> quando il preparatore apre il POST.</p><button class="btn" onclick="attivaNotifiche(this)">Attiva</button></div>';
+  }
+  document.querySelectorAll('.notifBox').forEach(b => b.innerHTML = html);
+}
+function b64uBytes(s){ const p = '='.repeat((4 - s.length % 4) % 4); const r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, c => c.charCodeAt(0)); }
+async function registraPush(){
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64uBytes(VAPID_PUBLIC) });
+  const j = sub.toJSON();
+  await rpc('salva_push', Object.assign(pid(), { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth }));
+  state.push = true;
+}
+async function attivaNotifiche(btn){
+  btn.disabled = true;
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('Notifiche non consentite'); renderNotif(); return; }
+    await registraPush();
+    toast('Notifiche attivate 🔔');
+  } catch (e) { toast('Non riesco ad attivare le notifiche: ' + e.message); }
+  renderNotif();
+}
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+  navigator.serviceWorker.addEventListener('message', e => { if (e.data === 'aggiorna') carica(); });
+}
+
+/* ---------- invio ---------- */
 function sendPre(){
-  const b = document.getElementById('sendPre'); b.disabled = true; b.textContent = 'Invio…';
+  const b = $('sendPre'); b.disabled = true; b.textContent = 'Invio…';
   rpc('invia_pre', Object.assign(pid(), { p_data: day, p_tqr: S.tqr, p_sonno_q: S.sonnoQ, p_sonno_h: S.sonnoH, p_doms: S.doms, p_stress: S.stress, p_disp: S.disp }))
     .then(() => {
-      state.stato[day].pre = true; forceForm = false; b.textContent = 'Invia PRE';
-      toast('PRE inviato'); view = 'post'; render(); window.scrollTo(0, 0);
+      Object.assign(state.stato[day], { pre: true, disp: S.disp });
+      b.textContent = 'Invia PRE'; toast('PRE inviato'); render(); window.scrollTo(0, 0);
     }).catch(e => { b.disabled = false; b.textContent = 'Invia PRE'; toast(e.message); });
 }
 function sendPost(){
-  const b = document.getElementById('sendPost'); b.disabled = true; b.textContent = 'Invio…';
+  const b = $('sendPost'); b.disabled = true; b.textContent = 'Invio…';
   rpc('invia_post', Object.assign(pid(), { p_data: day, p_rpe: P.rpe }))
     .then(() => {
-      state.stato[day].post = true; forceForm = false; b.textContent = 'Invia POST';
-      toast('POST inviato'); render(); window.scrollTo(0, 0);
-    }).catch(e => { b.disabled = false; b.textContent = 'Invia POST'; toast(e.message); });
+      state.stato[day].post = true;
+      b.textContent = 'Invia POST'; toast('POST inviato'); render(); window.scrollTo(0, 0);
+    }).catch(e => { b.disabled = false; b.textContent = 'Invia POST'; toast(e.message); carica(); });
 }
 
-rpc('stato_atleta', pid()).then(s => {
-  [s.oggi, s.ieri].forEach(k => { s.stato[k] = s.stato[k] || { pre: false, post: false }; });
-  document.getElementById('hello').textContent = 'Monitoraggio · ' + ID;
-  document.getElementById('ciao').textContent = 'Ciao ' + s.nome.split(' ')[0];
-  document.title = 'Agenda · ' + s.nome.split(' ')[0];
-  state = s; day = s.oggi;
-  // se il PRE di oggi è già fatto, apri direttamente il POST
-  if (s.stato[s.oggi].pre && !s.stato[s.oggi].post) view = 'post';
-  document.getElementById('loading').remove();
-  renderDays(); render();
-}).catch(e => { document.getElementById('loading').textContent = e.message === 'Link non valido' ? 'Link non valido. Chiedi allo staff il tuo link personale.' : 'Errore: ' + e.message; });
+/* ---------- caricamento ---------- */
+async function carica(){
+  if (!ID || !TOK) { $('loading').textContent = 'Apri il link personale che ti ha mandato lo staff.'; return; }
+  try {
+    const s = await rpc('stato_atleta', pid());
+    $('hello').textContent = 'Monitoraggio · ' + ID;
+    $('ciao').textContent = 'Ciao ' + s.nome.split(' ')[0];
+    document.title = 'Agenda · ' + s.nome.split(' ')[0];
+    const primo = !state;
+    state = s;
+    if (primo || ![s.oggi, s.ieri].includes(day)) day = s.oggi;
+    if ($('loading')) $('loading').remove();
+    renderDays(); render();
+    // se il permesso c'è già ma il server non ha l'iscrizione (es. telefono nuovo), la rinnovo
+    if (pushOk() && Notification.permission === 'granted' && !s.push) registraPush().then(renderNotif).catch(() => {});
+  } catch (e) {
+    if ($('loading')) $('loading').textContent = e.message === 'Link non valido' ? 'Link non valido. Chiedi allo staff il tuo link personale.' : 'Errore: ' + e.message;
+  }
+}
+// quando l'atleta torna sull'app (es. dalla notifica) ricarico lo stato
+document.addEventListener('visibilitychange', () => { if (!document.hidden && state) carica(); });
+carica();
 </script>
 </body>
 </html>
