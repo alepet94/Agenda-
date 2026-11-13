@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agenda · Staff</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f1ec; --card:#fff; --ink:#16181d; --mute:#6b6f78; --line:#e6e1d9; --soft:#faf8f5;
+    --acc:#e8642c; --ok:#1f9d62; --okb:#e1f4ea; --warn:#c98a0b; --warnb:#fbf0d6; --bad:#d23c3c; --badb:#fbe3e3; --ill:#7a5bd0; --illb:#eee8fb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Archivo,system-ui,sans-serif;font-size:14px}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 16px 40px}
+  header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px;padding:24px 0 14px}
+  h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.02em}
+  .sub{color:var(--mute);font-size:13px}
+  nav{display:flex;flex-wrap:wrap;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px}
+  nav button{border:0;background:none;font:inherit;font-weight:600;padding:8px 14px;border-radius:9px;cursor:pointer;color:var(--mute)}
+  nav button.on{background:var(--ink);color:#fff}
+  .datebar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 16px}
+  .datebar button{border:1px solid var(--line);background:var(--card);border-radius:10px;width:38px;height:38px;font-size:18px;cursor:pointer;color:var(--ink)}
+  .datebar .d{font-size:18px;font-weight:700;min-width:210px}
+  .datebar .today{width:auto;padding:0 12px;font:inherit;font-weight:600}
+  .datebar .tag{margin-left:auto;font-weight:600;padding:6px 10px;border-radius:999px;background:var(--card);border:1px solid var(--line)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
+  .kpi .l{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+  .kpi .v{font-size:28px;font-weight:800;margin-top:4px;letter-spacing:-.02em}
+  .kpi .v small{font-size:14px;color:var(--mute);font-weight:500}
+  .kpi .n{font-size:12.5px;color:var(--mute);margin-top:2px}
+  .bar{height:6px;background:var(--soft);border-radius:4px;margin-top:8px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--ink);border-radius:4px}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden;margin-bottom:14px}
+  .ph{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line)}
+  .ph h2{margin:0;font-size:16px}
+  .pb{padding:16px}
+  .scroll{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;white-space:nowrap}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);font-weight:600;text-align:center;padding:10px 8px;background:var(--soft)}
+  th:first-child,td:first-child{text-align:left;padding-left:16px}
+  td{padding:10px 8px;border-top:1px solid var(--line);text-align:center;font-variant-numeric:tabular-nums}
+  tr.click{cursor:pointer} tr.click:hover td{background:#fcfbf9}
+  .nm{font-weight:700} .nm small{display:block;font-weight:400;color:var(--mute);font-size:12px}
+  .c{display:inline-block;min-width:30px;padding:3px 6px;border-radius:7px;font-weight:700}
+  .g{background:var(--okb);color:var(--ok)} .y{background:var(--warnb);color:var(--warn)} .r{background:var(--badb);color:var(--bad)}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12.5px;font-weight:600}
+  .pill i{width:7px;height:7px;border-radius:50%;background:currentColor}
+  .p-ok{background:var(--okb);color:var(--ok)} .p-lim{background:var(--warnb);color:var(--warn)}
+  .p-inj{background:var(--badb);color:var(--bad)} .p-ill{background:var(--illb);color:var(--ill)} .p-no{background:var(--soft);color:var(--mute)}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--line)} .dot.on{background:var(--ok)}
+  .muted{color:var(--mute)}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .row label{font-size:12px;color:var(--mute);font-weight:600}
+  input,select{font:inherit;border:1px solid var(--line);border-radius:9px;padding:7px 9px;background:var(--soft);color:var(--ink)}
+  input.num{width:64px;text-align:center}
+  .btn{font:inherit;font-weight:700;border:0;border-radius:10px;padding:9px 14px;background:var(--ink);color:#fff;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn.ghost{background:var(--soft);color:var(--ink);border:1px solid var(--line)}
+  .btn.acc{background:var(--acc)}
+  .btn:disabled{opacity:.4}
+  .ov{position:fixed;inset:0;background:rgba(22,24,29,.35);display:flex;justify-content:flex-end;z-index:5}
+  .dr{width:min(440px,100%);height:100%;background:var(--card);padding:22px 20px;overflow:auto}
+  .dr h3{margin:0;font-size:22px} .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px}
+  .fld label{display:block;font-size:12px;color:var(--mute);font-weight:600;margin-bottom:4px}
+  .fld input,.fld select{width:100%}
+  .sec{margin-top:18px;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);font-weight:700}
+  svg text{font-family:Archivo,system-ui,sans-serif}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:11px 16px;border-radius:12px;font-weight:600;opacity:0;transition:.25s;z-index:9;pointer-events:none}
+  .toast.show{opacity:1}
+  .loading{padding:60px;text-align:center;color:var(--mute)}
+  .login{max-width:380px;margin:12vh auto 0;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px 24px}
+  .login h1{margin-bottom:6px} .login input{width:100%;margin-top:12px;padding:12px}
+  .login .btn{width:100%;margin-top:16px;padding:13px}
+  .err{color:var(--bad);font-weight:600;margin-top:10px;min-height:18px}
+  /* ---------- REPORT (pagine A4) ---------- */
+  .rep-wrap{background:#d9d5ce;border-radius:18px;padding:20px;overflow-x:auto}
+  .page{width:794px;min-height:1123px;margin:0 auto 20px;background:#fff;color:#16181d;padding:44px 48px;font-size:11.5px;position:relative}
+  .page:last-child{margin-bottom:0}
+  .pdf .page{margin:0;height:1123px;overflow:hidden}
+  .rh{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #16181d;padding-bottom:12px;margin-bottom:18px}
+  .rh .t{font-size:24px;font-weight:800;letter-spacing:-.02em}
+  .rh .s{color:#6b6f78;font-size:12px;margin-top:2px}
+  .rh .b{text-align:right;font-size:11px;color:#6b6f78}
+  .rh .b b{display:block;font-size:13px;color:#e8642c;letter-spacing:.06em}
+  .rk{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+  .rk div{border:1px solid #e6e1d9;border-radius:10px;padding:10px 12px}
+  .rk span{display:block;font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:#6b6f78;font-weight:700}
+  .rk b{font-size:20px;font-weight:800}
+  .rk small{color:#6b6f78;font-size:10.5px}
+  .rt{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;margin:16px 0 8px}
+  .page table{white-space:nowrap}
+  .page th{font-size:9px;padding:6px 5px;background:#f4f1ec}
+  .page td{padding:5px 5px;font-size:11px;border-top:1px solid #eee9e1}
+  .page th:first-child,.page td:first-child{padding-left:8px}
+  .page .c{min-width:24px;padding:1px 5px;border-radius:5px}
+  .page .pill{padding:2px 7px;font-size:10px}
+  .note{border-left:3px solid #e8642c;background:#fdf3ee;padding:8px 12px;border-radius:0 8px 8px 0;margin-top:6px;line-height:1.5}
+  .rf{position:absolute;left:48px;right:48px;bottom:24px;display:flex;justify-content:space-between;color:#9a9da4;font-size:9.5px;border-top:1px solid #eee9e1;padding-top:8px}
+  .legend{color:#6b6f78;font-size:10px;margin-top:6px}
+  @media (max-width:640px){ .datebar .d{min-width:0;font-size:16px} .datebar .tag{margin-left:0} }
+</style>
+</head>
+<body>
+<div id="root"><div class="loading">Caricamento…</div></div>
+<div id="drawer"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== CONFIGURAZIONE: incolla qui i dati del tuo progetto Supabase ===== */
+const SUPABASE_URL = 'https://civadhuwyvkxswmbfqrb.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_VUgeMxn_e5ob9PyIrODNVQ_wHxpQJ41';  // chiave publishable (pubblica)
+const SQUADRA = 'U19';
+// Indirizzo della pagina atleti: se staff.html e atleta.html stanno nella stessa cartella online, lascia così.
+const ATLETA_URL = new URL('atleta.html', location.href).href;
+/* ======================================================================== */
+
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+let D = null, cur = null, view = 'giorno', repTipo = 'giorno', repAtleta = null;
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const num = x => (x === '' || x == null || isNaN(+x)) ? null : +x;
+const avg = a => a.length ? a.reduce((s, v) => s + v, 0) / a.length : null;
+const sum = a => a.reduce((s, v) => s + v, 0);
+const fmtN = (x, d = 0) => x == null ? '–' : (+x).toLocaleString('it-IT', { maximumFractionDigits: d, minimumFractionDigits: d });
+const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+const addDays = (k, n) => { const d = new Date(k + 'T12:00:00'); d.setDate(d.getDate() + n); return iso(d); };
+const dLabel = (k, o) => new Date(k + 'T12:00:00').toLocaleDateString('it-IT', o || { weekday: 'long', day: 'numeric', month: 'long' });
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const lunedi = k => { const d = new Date(k + 'T12:00:00'); return addDays(k, -((d.getDay() + 6) % 7)); };
+const row = (k, id) => D.idx[k + '|' + id];
+const attivi = () => D.atleti.filter(a => a.attivo);
+const ND = ['Infortunato', 'Ammalato'];
+function toast(t){ const e = $('#toast'); e.textContent = t; e.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => e.classList.remove('show'), 2600); }
+
+/* ---------- LOGIN ---------- */
+async function start(){
+  if (SUPABASE_URL.startsWith('INCOLLA')) { $('#root').innerHTML = '<div class="login"><h1>Configurazione</h1><p class="sub">Apri staff.html con un editor di testo e incolla Project URL e anon key di Supabase in cima allo script.</p></div>'; return; }
+  const { data } = await sb.auth.getSession();
+  if (data.session) return enter();
+  showLogin();
+}
+function showLogin(msg){
+  $('#root').innerHTML = `<form class="login" onsubmit="doLogin(event)">
+    <div class="sub">Monitoraggio basket · ${esc(SQUADRA)}</div><h1>Agenda · Staff</h1>
+    <input type="email" id="em" placeholder="Email" autocomplete="username" required>
+    <input type="password" id="pw" placeholder="Password" autocomplete="current-password" required>
+    <button class="btn" type="submit">Entra</button><div class="err" id="err">${esc(msg || '')}</div></form>`;
+}
+async function doLogin(e){
+  e.preventDefault();
+  $('#err').textContent = '';
+  const { error } = await sb.auth.signInWithPassword({ email: $('#em').value.trim(), password: $('#pw').value });
+  if (error) { $('#err').textContent = 'Email o password non corrette.'; return; }
+  enter();
+}
+async function enter(){
+  const { data: ok } = await sb.rpc('is_staff');
+  if (!ok) { await sb.auth.signOut(); return showLogin('Questo account non è abilitato come staff.'); }
+  $('#root').innerHTML = `<div class="wrap"><header>
+    <div><div class="sub">Monitoraggio basket · ${esc(SQUADRA)}</div><h1>Agenda · Staff</h1></div>
+    <nav>
+      <button data-v="giorno" class="on">Giornata</button><button data-v="squadra">Carichi</button>
+      <button data-v="prog">Programmazione</button><button data-v="atleti">Atleti</button>
+      <button data-v="report">Report PDF</button><button data-v="esci">Esci</button>
+    </nav></header><div id="app"><div class="loading">Caricamento dati…</div></div></div>`;
+  document.querySelectorAll('nav button').forEach(b => b.onclick = async () => {
+    if (b.dataset.v === 'esci') { await sb.auth.signOut(); return showLogin(); }
+    view = b.dataset.v; document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b)); render();
+  });
+  load();
+}
+
+/* ---------- DATI ---------- */
+async function load(){
+  const oggi = iso(new Date());
+  const da = addDays(oggi, -150);
+  const [a, p, g] = await Promise.all([
+    sb.from('atleti').select('*').order('id'),
+    sb.from('programmazione').select('*'),
+    sb.from('v_giornaliero').select('*').gte('data', da).order('data')
+  ]);
+  const err = a.error || p.error || g.error;
+  if (err) { $('#app').innerHTML = `<div class="loading">Errore: ${esc(err.message)}</div>`; return; }
+  const righe = g.data.map(r => ({
+    data: r.data, id: r.atleta_id, tqr: r.tqr, sonnoQ: r.sonno_q, sonnoH: num(r.sonno_h), doms: r.doms, stress: r.stress, disp: r.disp,
+    w: r.min_w, v: r.min_v, tp: r.min_tp, g: r.min_g, tot: r.min_tot, rpe: r.rpe, au: num(r.carico_au), stato: r.stato,
+    pre_at: r.pre_at, post_at: r.post_at, staff_at: r.staff_at
+  }));
+  const idx = {}; righe.forEach(r => idx[r.data + '|' + r.id] = r);
+  const prog = {}; p.data.forEach(x => prog[x.data] = { tipo: x.tipo, rpe: num(x.rpe_obiettivo) });
+  D = { oggi, atleti: a.data.map(x => Object.assign(x, { link: ATLETA_URL + '?a=' + encodeURIComponent(x.id) + '&t=' + x.token })), righe, idx, prog };
+  if (!cur) cur = oggi;
+  if (!repAtleta && D.atleti.length) repAtleta = D.atleti[0].id;
+  render();
+}
+async function salvaRighe(list){
+  const rows = list.map(o => Object.assign(o, { staff_at: new Date().toISOString() }));
+  const { error } = await sb.from('giornaliero').upsert(rows, { onConflict: 'data,atleta_id' });
+  if (error) throw error;
+}
+function render(){ ({ giorno: vGiorno, squadra: vSquadra, prog: vProg, atleti: vAtleti, report: vReport })[view](); }
+
+/* ---------- semafori ---------- */
+const col = {
+  tqr: v => v == null ? '' : v <= 5 ? 'r' : v <= 7 ? 'y' : 'g',
+  sonnoQ: v => v == null ? '' : v <= 2 ? 'r' : v === 3 ? 'y' : 'g',
+  sonnoH: v => v == null ? '' : v < 6.5 ? 'r' : v < 7.5 ? 'y' : 'g',
+  doms: v => v == null ? '' : v >= 4 ? 'r' : v >= 3 ? 'y' : 'g',
+  stress: v => v == null ? '' : v >= 4 ? 'r' : v >= 3 ? 'y' : 'g'
+};
+const cell = (k, v, d) => v == null ? '<span class="muted">–</span>' : `<span class="c ${col[k](v)}">${fmtN(v, d ?? (k === 'sonnoH' ? 1 : 0))}</span>`;
+function pill(d){
+  const m = { 'Disponibile': 'p-ok', 'Disponibile con limitazioni': 'p-lim', 'Infortunato': 'p-inj', 'Ammalato': 'p-ill' };
+  const t = d === 'Disponibile con limitazioni' ? 'Con limitazioni' : d;
+  return d ? `<span class="pill ${m[d] || 'p-no'}"><i></i>${esc(t)}</span>` : '<span class="pill p-no">Non compilato</span>';
+}
+function kpi(l, v, n, frac){
+  return `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div>${n ? `<div class="n">${n}</div>` : ''}
+    ${frac != null ? `<div class="bar"><i style="width:${Math.round(frac * 100)}%"></i></div>` : ''}</div>`;
+}
+function go(n){ cur = addDays(cur, n); render(); }
+function datebar(label, step, extra){
+  return `<div class="datebar"><button onclick="go(-${step})">‹</button><div class="d">${label}</div><button onclick="go(${step})">›</button>
+    <button class="today" onclick="cur=D.oggi;render()">Oggi</button>${extra || ''}</div>`;
+}
+
+/* ---------- calcoli ---------- */
+function giorno(k){
+  const A = attivi(), R = A.map(a => ({ a, r: row(k, a.id) || {} }));
+  const rpes = R.map(x => num(x.r.rpe)).filter(v => v != null), aus = R.map(x => num(x.r.au)).filter(v => v != null);
+  const p = D.prog[k] || {};
+  return {
+    A, R, p, rpes, aus,
+    pre: R.filter(x => num(x.r.tqr) != null).length, post: R.filter(x => num(x.r.rpe) != null).length,
+    disp: R.filter(x => x.r.disp && !ND.includes(x.r.disp)).length,
+    nd: R.filter(x => ND.includes(x.r.disp)),
+    tqr: avg(R.map(x => num(x.r.tqr)).filter(v => v != null)),
+    diff: avg(rpes) != null && p.rpe != null ? avg(rpes) - p.rpe : null
+  };
+}
+function metrics(id, end){
+  const au = k => num((row(k, id) || {}).au) || 0;
+  const d7 = [...Array(7)].map((_, i) => au(addDays(end, -i))), d28 = [...Array(28)].map((_, i) => au(addDays(end, -i)));
+  const s7 = sum(d7), m7 = s7 / 7, m28 = sum(d28) / 28;
+  const sd = Math.sqrt(d7.reduce((a, b) => a + (b - m7) ** 2, 0) / 7);
+  const mono = sd > 0 ? m7 / sd : null;
+  const w = k => row(k, id) || {};
+  const last7 = [...Array(7)].map((_, i) => w(addDays(end, -i)));
+  const media = f => avg(last7.map(r => num(r[f])).filter(v => v != null));
+  const giorni = D.righe.filter(r => r.id === id && num(r.au) != null && r.data <= end && r.data > addDays(end, -28)).length;
+  return { s7, acwr: m28 > 0 ? m7 / m28 : null, mono, strain: mono != null ? s7 * mono : null,
+    tqr: media('tqr'), sonnoH: media('sonnoH'), doms: media('doms'), stress: media('stress'), rpe: media('rpe'),
+    min: sum(last7.map(r => num(r.tot) || 0)), nd: last7.filter(r => ND.includes(r.disp)).length, giorni };
+}
+function flags(r){
+  const f = [];
+  if (num(r.tqr) != null && r.tqr <= 5) f.push('recupero basso (TQR ' + r.tqr + ')');
+  if (num(r.sonnoH) != null && r.sonnoH < 6.5) f.push('dormito ' + fmtN(r.sonnoH, 1) + ' h');
+  if (num(r.sonnoQ) != null && r.sonnoQ <= 2) f.push('sonno di scarsa qualità');
+  if (num(r.doms) != null && r.doms >= 4) f.push('DOMS ' + r.doms);
+  if (num(r.stress) != null && r.stress >= 4) f.push('stress ' + r.stress);
+  if (r.disp === 'Disponibile con limitazioni') f.push('disponibile con limitazioni');
+  return f;
+}
+const acwCls = v => v == null ? '' : v > 1.5 ? 'r' : v > 1.3 || v < 0.8 ? 'y' : 'g';
+
+/* ---------- GIORNATA ---------- */
+function vGiorno(){
+  const G = giorno(cur), A = G.A;
+  $('#app').innerHTML = `
+  ${datebar(cap(dLabel(cur)), 1, `<span class="tag">${esc(G.p.tipo || 'Giornata non programmata')}${G.p.rpe != null ? ' · RPE obiettivo ' + G.p.rpe : ''}</span>`)}
+  <div class="kpis">
+    ${kpi('PRE compilati', `${G.pre}<small>/${A.length}</small>`, '', A.length ? G.pre / A.length : 0)}
+    ${kpi('POST compilati', `${G.post}<small>/${A.length}</small>`, '', A.length ? G.post / A.length : 0)}
+    ${kpi('RPE medio', fmtN(avg(G.rpes), 1), G.diff == null ? (G.p.rpe != null ? 'obiettivo ' + G.p.rpe : 'obiettivo non impostato') : `${G.diff >= 0 ? '+' : ''}${fmtN(G.diff, 1)} vs obiettivo`)}
+    ${kpi('Carico medio', fmtN(avg(G.aus)) + '<small> AU</small>', 'totale ' + fmtN(sum(G.aus)) + ' AU')}
+    ${kpi('TQR medio', fmtN(G.tqr, 1), G.disp + ' disponibili')}
+  </div>
+  <div class="panel">
+    <div class="ph"><h2>Atleti</h2>
+      <div class="row"><label>Minuti a tutti i disponibili</label>
+        <input class="num" id="bW" placeholder="W" inputmode="numeric"><input class="num" id="bV" placeholder="V" inputmode="numeric">
+        <input class="num" id="bTP" placeholder="TP" inputmode="numeric"><input class="num" id="bG" placeholder="G" inputmode="numeric">
+        <button class="btn acc" onclick="bulk()">Applica</button></div>
+    </div>
+    <div class="scroll"><table>
+      <tr><th>Atleta</th><th>PRE</th><th>POST</th><th>Disponibilità</th><th>TQR</th><th>Sonno</th><th>Ore</th><th>DOMS</th><th>Stress</th>
+          <th>W</th><th>V</th><th>TP</th><th>G</th><th>Tot</th><th>RPE</th><th>AU</th></tr>
+      ${G.R.map(({ a, r }) => `<tr class="click" onclick="edit('${esc(a.id)}')">
+        <td class="nm">${esc(a.nome)}<small>${esc(a.id)}${r.staff_at ? ' · modificato dallo staff' : ''}</small></td>
+        <td><span class="dot ${num(r.tqr) != null ? 'on' : ''}"></span></td>
+        <td><span class="dot ${num(r.rpe) != null ? 'on' : ''}"></span></td>
+        <td>${pill(r.disp)}</td>
+        <td>${cell('tqr', num(r.tqr))}</td><td>${cell('sonnoQ', num(r.sonnoQ))}</td><td>${cell('sonnoH', num(r.sonnoH))}</td>
+        <td>${cell('doms', num(r.doms))}</td><td>${cell('stress', num(r.stress))}</td>
+        ${['w', 'v', 'tp', 'g'].map(k => `<td>${num(r[k]) ?? '<span class="muted">–</span>'}</td>`).join('')}
+        <td><b>${num(r.tot) ?? '–'}</b></td><td><b>${num(r.rpe) ?? '–'}</b></td><td><b>${fmtN(num(r.au))}</b></td>
+      </tr>`).join('')}
+    </table></div>
+  </div>`;
+}
+async function bulk(){
+  const v = { w: $('#bW').value, v: $('#bV').value, tp: $('#bTP').value, g: $('#bG').value };
+  const cols = { w: 'min_w', v: 'min_v', tp: 'min_tp', g: 'min_g' };
+  const keys = Object.keys(v).filter(k => v[k] !== '');
+  if (!keys.length) return toast('Inserisci almeno un valore');
+  if (keys.some(k => !(+v[k] >= 0))) return toast('Minuti non validi');
+  const ids = attivi().filter(a => !ND.includes((row(cur, a.id) || {}).disp)).map(a => a.id);
+  try {
+    await salvaRighe(ids.map(id => { const o = { data: cur, atleta_id: id }; keys.forEach(k => o[cols[k]] = +v[k]); return o; }));
+    toast('Minuti salvati per ' + ids.length + ' atleti'); load();
+  } catch (e) { toast('Errore: ' + e.message); }
+}
+
+/* ---------- drawer modifica ---------- */
+function edit(id){
+  const a = D.atleti.find(x => x.id === id), r = row(cur, id) || {};
+  const f = (k, l, step) => `<div class="fld"><label>${l}</label><input type="number" inputmode="decimal" step="${step || 1}" id="f_${k}" value="${r[k] ?? ''}"></div>`;
+  const opts = ['', 'Disponibile', 'Disponibile con limitazioni', 'Infortunato', 'Ammalato'];
+  const quando = t => t ? new Date(t).toLocaleString('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '–';
+  $('#drawer').innerHTML = `<div class="ov" onclick="if(event.target===this)closeDr()"><div class="dr">
+    <div class="sub">${cap(dLabel(cur))}</div><h3>${esc(a.nome)}</h3>
+    <div class="sub" style="margin-top:6px">PRE inviato: ${quando(r.pre_at)} · POST inviato: ${quando(r.post_at)}${r.staff_at ? '<br>Ultima modifica staff: ' + quando(r.staff_at) : ''}</div>
+    <div class="sec">Wellness (PRE)</div>
+    <div class="grid2">${f('tqr', 'TQR (1-10)')}${f('sonnoQ', 'Qualità sonno (1-5)')}${f('sonnoH', 'Ore sonno', 0.1)}${f('doms', 'DOMS (1-5)')}${f('stress', 'Stress (1-5)')}
+      <div class="fld"><label>Disponibilità</label><select id="f_disp">${opts.map(o => `<option ${o === (r.disp || '') ? 'selected' : ''}>${o}</option>`).join('')}</select></div></div>
+    <div class="sec">Minuti</div>
+    <div class="grid2">${f('w', 'W · pesi')}${f('v', 'V · tecnica individuale')}${f('tp', 'TP · squadra')}${f('g', 'G · partita')}</div>
+    <div class="sec">Carico (POST)</div>
+    <div class="grid2">${f('rpe', 'RPE (0-10)')}</div>
+    <div class="sec">Ultimi 28 giorni</div>
+    ${chartAtleta(id, cur, 400, 110)}
+    <div style="display:flex;gap:8px;margin-top:20px"><button class="btn" onclick="saveDr('${esc(id)}')">Salva</button><button class="btn ghost" onclick="closeDr()">Annulla</button></div>
+  </div></div>`;
+}
+function closeDr(){ $('#drawer').innerHTML = ''; }
+async function saveDr(id){
+  const map = { tqr: 'tqr', sonnoQ: 'sonno_q', sonnoH: 'sonno_h', doms: 'doms', stress: 'stress', w: 'min_w', v: 'min_v', tp: 'min_tp', g: 'min_g', rpe: 'rpe' };
+  const o = { data: cur, atleta_id: id };
+  Object.keys(map).forEach(k => { const v = $('#f_' + k).value; o[map[k]] = v === '' ? null : +v; });
+  o.disp = $('#f_disp').value || null;
+  try { await salvaRighe([o]); toast('Salvato'); closeDr(); load(); }
+  catch (e) { toast('Errore: ' + (e.message.includes('check') ? 'un valore è fuori scala' : e.message)); }
+}
+
+/* ---------- grafici (SVG) ---------- */
+function chartAtleta(id, end, W, H, fixed){
+  const days = [...Array(28)].map((_, i) => addDays(end, i - 27));
+  const au = days.map(k => num((row(k, id) || {}).au) || 0), tq = days.map(k => num((row(k, id) || {}).tqr));
+  const mx = Math.max(1, ...au), bw = W / 28, ch = H - 30;
+  const bars = au.map((v, i) => `<rect x="${(i * bw + 1).toFixed(1)}" y="${(H - 20 - (v / mx) * ch).toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${((v / mx) * ch).toFixed(1)}" rx="2" fill="${days[i] === end ? '#e8642c' : '#16181d'}" opacity="${days[i] === end ? 1 : .8}"/>`).join('');
+  const pts = tq.map((v, i) => v == null ? null : `${(i * bw + bw / 2).toFixed(1)},${(H - 20 - (v / 10) * ch).toFixed(1)}`).filter(Boolean).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" ${fixed ? `width="${W}" height="${H}"` : 'width="100%"'}><g>${bars}</g>
+    <polyline points="${pts}" fill="none" stroke="#1f9d62" stroke-width="2"/>
+    <text x="0" y="${H - 4}" font-size="11" fill="#6b6f78">Barre: carico AU · Linea verde: TQR (0-10) · ${dLabel(days[0], { day: 'numeric', month: 'short' })} – ${dLabel(end, { day: 'numeric', month: 'short' })}</text></svg>`;
+}
+function chartSquadra(days, W, H, opt){
+  opt = opt || {};
+  const team = days.map(k => avg(D.righe.filter(r => r.data === k && num(r.au) != null).map(r => +r.au)) || 0);
+  const mx = Math.max(1, ...team), bw = W / days.length, ch = H - 50;
+  return `<svg viewBox="0 0 ${W} ${H}" ${opt.fixed ? `width="${W}" height="${H}"` : 'width="100%"'}>${team.map((v, i) => `<rect x="${(i * bw + 4).toFixed(1)}" y="${(H - 30 - (v / mx) * ch).toFixed(1)}" width="${(bw - 8).toFixed(1)}" height="${((v / mx) * ch).toFixed(1)}" rx="4" fill="${days[i] === opt.hi ? '#e8642c' : '#16181d'}"/>
+    <text x="${(i * bw + bw / 2).toFixed(1)}" y="${H - 12}" font-size="${opt.fs || 12}" text-anchor="middle" fill="#6b6f78">${opt.lab ? opt.lab(days[i]) : dLabel(days[i], { day: 'numeric' })}</text>
+    ${v ? `<text x="${(i * bw + bw / 2).toFixed(1)}" y="${(H - 36 - (v / mx) * ch).toFixed(1)}" font-size="${(opt.fs || 12) - 1}" text-anchor="middle" fill="#16181d">${Math.round(v)}</text>` : ''}`).join('')}</svg>`;
+}
+
+/* ---------- CARICHI ---------- */
+function vSquadra(){
+  const days = [...Array(21)].map((_, i) => addDays(cur, i - 20));
+  $('#app').innerHTML = `
+  ${datebar('Fino al ' + dLabel(cur, { day: 'numeric', month: 'long' }), 7)}
+  <div class="panel"><div class="ph"><h2>Carico medio squadra · ultimi 21 giorni (AU)</h2></div>
+    <div class="pb">${chartSquadra(days, 1000, 220, { hi: cur })}</div></div>
+  <div class="panel"><div class="ph"><h2>Indicatori per atleta</h2><span class="sub">ACWR = media 7 gg / media 28 gg · Monotony = media / dev. std 7 gg</span></div>
+    <div class="scroll"><table><tr><th>Atleta</th><th>Carico 7 gg</th><th>ACWR</th><th>Monotony</th><th>Strain</th><th>TQR medio 7 gg</th><th>Giorni registrati (28)</th></tr>
+    ${attivi().map(a => { const m = metrics(a.id, cur); return `<tr class="click" onclick="repTipo='atleta';repAtleta='${esc(a.id)}';document.querySelector('nav button[data-v=report]').click()">
+      <td class="nm">${esc(a.nome)}<small>${esc(a.id)} · apri report</small></td><td><b>${fmtN(m.s7)}</b></td>
+      <td>${m.acwr == null ? '–' : m.giorni < 21 ? `<span class="muted">${fmtN(m.acwr, 2)}*</span>` : `<span class="c ${acwCls(m.acwr)}">${fmtN(m.acwr, 2)}</span>`}</td>
+      <td>${m.mono == null ? '–' : `<span class="c ${m.mono > 2 ? 'r' : 'g'}">${fmtN(m.mono, 2)}</span>`}</td>
+      <td>${fmtN(m.strain)}</td><td>${cell('tqr', m.tqr, 1)}</td><td class="muted">${m.giorni}</td></tr>`; }).join('')}
+    </table></div><div class="sub" style="padding:10px 16px">* ACWR poco affidabile finché non ci sono circa 3-4 settimane di dati.</div></div>`;
+}
+
+/* ---------- PROGRAMMAZIONE ---------- */
+function vProg(){
+  const lun = lunedi(cur), days = [...Array(14)].map((_, i) => addDays(lun, i));
+  const tipi = ['ALLENAMENTO', 'PARTITA', 'RIPOSO'];
+  $('#app').innerHTML = `
+  ${datebar('Settimane dal ' + dLabel(lun, { day: 'numeric', month: 'long' }), 7)}
+  <div class="panel"><div class="scroll"><table><tr><th>Giorno</th><th>Tipo giornata</th><th>RPE obiettivo</th><th>RPE medio squadra</th><th>Differenza</th><th></th></tr>
+  ${days.map(k => { const p = D.prog[k] || {}; const m = avg(D.righe.filter(r => r.data === k && num(r.rpe) != null).map(r => +r.rpe));
+    const df = m != null && p.rpe != null ? m - p.rpe : null;
+    return `<tr><td class="nm">${cap(dLabel(k, { weekday: 'short', day: 'numeric', month: 'short' }))}</td>
+      <td><select id="t_${k}"><option></option>${tipi.map(t => `<option ${t === p.tipo ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
+      <td><input class="num" type="number" min="0" max="10" step="0.5" id="r_${k}" value="${p.rpe ?? ''}"></td>
+      <td>${fmtN(m, 1)}</td><td>${df == null ? '–' : `<span class="c ${Math.abs(df) > 1.5 ? 'r' : Math.abs(df) > 0.75 ? 'y' : 'g'}">${df >= 0 ? '+' : ''}${fmtN(df, 1)}</span>`}</td>
+      <td><button class="btn ghost" onclick="saveProg('${k}')">Salva</button></td></tr>`; }).join('')}
+  </table></div></div>`;
+}
+async function saveProg(k){
+  const t = $('#t_' + k).value || null, r = $('#r_' + k).value;
+  const { error } = await sb.from('programmazione').upsert({ data: k, tipo: t, rpe_obiettivo: r === '' ? null : +r });
+  if (error) return toast('Errore: ' + error.message);
+  toast('Programmazione salvata'); load();
+}
+
+/* ---------- ATLETI ---------- */
+function vAtleti(){
+  const G = giorno(D.oggi);
+  const mancaPre = G.R.filter(x => num(x.r.tqr) == null).map(x => x.a), mancaPost = G.R.filter(x => num(x.r.rpe) == null && !ND.includes(x.r.disp)).map(x => x.a);
+  const wa = (a, txt) => `https://wa.me/?text=${encodeURIComponent(txt + ' ' + a.link)}`;
+  $('#app').innerHTML = `
+  <div class="panel"><div class="ph"><h2>Oggi mancano</h2><span class="sub">Tocca un nome per mandargli il sollecito su WhatsApp</span></div>
+    <div class="pb"><div class="sec" style="margin-top:0">PRE (${mancaPre.length})</div><div class="row" style="margin-top:8px">${mancaPre.map(a => `<a class="btn ghost" target="_blank" href="${wa(a, '⏰ Ciao ' + a.nome.split(' ')[0] + ', manca il tuo PRE di oggi:')}">${esc(a.nome)}</a>`).join('') || '<span class="muted">Nessuno 👍</span>'}</div>
+    <div class="sec">POST (${mancaPost.length})</div><div class="row" style="margin-top:8px">${mancaPost.map(a => `<a class="btn ghost" target="_blank" href="${wa(a, '⏰ Ciao ' + a.nome.split(' ')[0] + ', manca il tuo POST di oggi:')}">${esc(a.nome)}</a>`).join('') || '<span class="muted">Nessuno 👍</span>'}</div></div></div>
+  <div class="panel"><div class="ph"><h2>Link personali</h2><span class="sub">Ogni atleta salva il suo link sulla schermata Home del telefono</span></div>
+  <div class="scroll"><table><tr><th>Atleta</th><th>Attivo</th><th>Link</th><th></th></tr>
+  ${D.atleti.map(a => `<tr><td class="nm">${esc(a.nome)}<small>${esc(a.id)} · ${esc(a.categoria || '')}</small></td>
+    <td><input type="checkbox" ${a.attivo ? 'checked' : ''} onchange="setAttivo('${esc(a.id)}', this.checked)"></td>
+    <td style="text-align:left;max-width:320px;overflow:hidden;text-overflow:ellipsis" class="muted">${esc(a.link)}</td>
+    <td><button class="btn ghost" onclick="copy('${esc(a.link)}')">Copia</button>
+        <a class="btn ghost" target="_blank" href="${wa(a, 'Ciao ' + a.nome.split(' ')[0] + '! Questo è il tuo link per il monitoraggio PRE/POST, salvalo sulla Home del telefono:')}">WhatsApp</a></td></tr>`).join('')}
+  </table></div></div>
+  <div class="panel"><div class="ph"><h2>Nuovo atleta</h2></div><div class="pb row">
+    <input id="nId" placeholder="ID (es. ROSSI)" style="text-transform:uppercase"><input id="nNome" placeholder="Nome e cognome">
+    <input id="nCat" placeholder="Categoria" value="${esc(SQUADRA.toLowerCase())}" style="width:110px"><button class="btn" onclick="nuovoAtleta()">Aggiungi</button></div></div>`;
+}
+async function setAttivo(id, v){
+  const { error } = await sb.from('atleti').update({ attivo: v }).eq('id', id);
+  if (error) return toast('Errore: ' + error.message);
+  toast(v ? 'Atleta attivato' : 'Atleta disattivato'); load();
+}
+async function nuovoAtleta(){
+  const id = $('#nId').value.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), nome = $('#nNome').value.trim();
+  if (!id || !nome) return toast('Inserisci ID e nome');
+  const { error } = await sb.from('atleti').insert({ id, nome, categoria: $('#nCat').value.trim() || null });
+  if (error) return toast('Errore: ' + (error.code === '23505' ? 'ID già esistente' : error.message));
+  toast('Atleta aggiunto'); load();
+}
+function copy(t){ navigator.clipboard.writeText(t).then(() => toast('Link copiato'), () => prompt('Copia il link', t)); }
+
+/* ---------- REPORT PDF ---------- */
+function vReport(){
+  const tipi = [['giorno', 'Giornata'], ['settimana', 'Settimana'], ['atleta', 'Singolo atleta'], ['completo', 'Completo (tutto)']];
+  $('#app').innerHTML = `
+  <div class="panel"><div class="ph"><h2>Report per gli allenatori</h2>
+    <div class="row">
+      <select id="rTipo" onchange="repTipo=this.value;vReport()">${tipi.map(([v, l]) => `<option value="${v}" ${v === repTipo ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <input type="date" id="rData" value="${cur}" onchange="cur=this.value;vReport()">
+      ${repTipo === 'atleta' ? `<select id="rAtl" onchange="repAtleta=this.value;vReport()">${D.atleti.map(a => `<option value="${esc(a.id)}" ${a.id === repAtleta ? 'selected' : ''}>${esc(a.nome)}</option>`).join('')}</select>` : ''}
+      <button class="btn acc" id="pdfBtn" onclick="scaricaPdf()">Scarica PDF</button>
+    </div></div>
+    <div class="pb"><div class="rep-wrap"><div id="rep">${reportHtml()}</div></div></div></div>`;
+}
+function reportHtml(){
+  if (repTipo === 'giorno') return pagGiorno(cur);
+  if (repTipo === 'settimana') return pagSettimana(cur);
+  if (repTipo === 'atleta') return pagAtleta(repAtleta, cur);
+  return pagGiorno(cur) + pagSettimana(cur) + attivi().map(a => pagAtleta(a.id, cur)).join('');
+}
+const testata = (t, s) => `<div class="rh"><div><div class="t">${t}</div><div class="s">${s}</div></div><div class="b"><b>AGENDA · ${esc(SQUADRA)}</b>Monitoraggio carico e benessere</div></div>`;
+const piede = () => `<div class="rf"><span>Generato il ${new Date().toLocaleDateString('it-IT')} · Agenda monitoraggio</span><span>TQR 1-10 · Sonno 1-5 · DOMS/Stress 1-5 (alto = peggio) · AU = minuti × RPE</span></div>`;
+const rk = (l, v, s) => `<div><span>${l}</span><b>${v}</b>${s ? `<br><small>${s}</small>` : ''}</div>`;
+
+function pagGiorno(k){
+  const G = giorno(k);
+  const att = G.R.map(({ a, r }) => ({ a, f: flags(r) })).filter(x => x.f.length);
+  return `<div class="page">${testata('Report giornaliero', cap(dLabel(k)) + ' · ' + esc(G.p.tipo || 'giornata non programmata') + (G.p.rpe != null ? ' · RPE obiettivo ' + G.p.rpe : ''))}
+  <div class="rk">${rk('Disponibili', G.disp + '/' + G.A.length, G.nd.length ? 'non disponibili: ' + G.nd.length : 'nessun assente')}
+    ${rk('RPE medio', fmtN(avg(G.rpes), 1), G.diff == null ? 'obiettivo ' + (G.p.rpe ?? '–') : (G.diff >= 0 ? '+' : '') + fmtN(G.diff, 1) + ' vs obiettivo')}
+    ${rk('Carico medio', fmtN(avg(G.aus)) + ' AU', 'totale ' + fmtN(sum(G.aus)) + ' AU')}
+    ${rk('TQR medio', fmtN(G.tqr, 1), 'compilati PRE ' + G.pre + ' · POST ' + G.post)}</div>
+  <div class="rt">Dettaglio atleti</div>
+  <table><tr><th>Atleta</th><th>Disponibilità</th><th>TQR</th><th>Sonno</th><th>Ore</th><th>DOMS</th><th>Stress</th><th>Minuti</th><th>RPE</th><th>AU</th></tr>
+  ${G.R.map(({ a, r }) => `<tr><td class="nm">${esc(a.nome)}</td><td>${pill(r.disp)}</td>
+    <td>${cell('tqr', num(r.tqr))}</td><td>${cell('sonnoQ', num(r.sonnoQ))}</td><td>${cell('sonnoH', num(r.sonnoH))}</td><td>${cell('doms', num(r.doms))}</td><td>${cell('stress', num(r.stress))}</td>
+    <td>${num(r.tot) ?? '–'}</td><td><b>${num(r.rpe) ?? '–'}</b></td><td><b>${fmtN(num(r.au))}</b></td></tr>`).join('')}</table>
+  <div class="rt">Da monitorare</div>
+  ${att.length ? att.map(x => `<div class="note"><b>${esc(x.a.nome)}</b>: ${x.f.join(', ')}</div>`).join('') : '<div class="note">Nessun segnale di allarme sul benessere.</div>'}
+  ${G.nd.length ? `<div class="note"><b>Non disponibili</b>: ${G.nd.map(x => esc(x.a.nome) + ' (' + esc(x.r.disp.toLowerCase()) + ')').join(', ')}</div>` : ''}
+  ${piede()}</div>`;
+}
+
+function pagSettimana(k){
+  const lun = lunedi(k), dom = addDays(lun, 6), days = [...Array(7)].map((_, i) => addDays(lun, i));
+  const A = attivi();
+  const perGiorno = days.map(d => { const G = giorno(d); return { d, G }; });
+  const rowsA = A.map(a => {
+    const rs = days.map(d => row(d, a.id) || {});
+    const aus = rs.map(r => num(r.au)).filter(v => v != null), m = metrics(a.id, dom);
+    return { a, sed: aus.length, min: sum(rs.map(r => num(r.tot) || 0)), au: sum(aus), rpe: avg(rs.map(r => num(r.rpe)).filter(v => v != null)),
+      tqr: avg(rs.map(r => num(r.tqr)).filter(v => v != null)), nd: rs.filter(r => ND.includes(r.disp)).length, m };
+  });
+  const tot = sum(rowsA.map(x => x.au));
+  return `<div class="page">${testata('Report settimanale', 'Da ' + dLabel(lun, { weekday: 'long', day: 'numeric', month: 'long' }) + ' a ' + dLabel(dom, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}
+  <div class="rk">${rk('Carico squadra', fmtN(tot) + ' AU', 'media per atleta ' + fmtN(A.length ? tot / A.length : null))}
+    ${rk('Sedute registrate', sum(rowsA.map(x => x.sed)), 'su ' + A.length + ' atleti')}
+    ${rk('RPE medio', fmtN(avg(rowsA.map(x => x.rpe).filter(v => v != null)), 1), '')}
+    ${rk('Giorni non disponibili', sum(rowsA.map(x => x.nd)), 'somma di tutti gli atleti')}</div>
+  <div class="rt">Carico medio squadra per giorno (AU)</div>
+  ${chartSquadra(days, 698, 170, { fixed: true, fs: 11, lab: d => cap(dLabel(d, { weekday: 'short', day: 'numeric' })) })}
+  <table style="margin-top:6px"><tr><th>Giorno</th><th>Tipo</th><th>RPE obiettivo</th><th>RPE medio</th><th>Differenza</th><th>Disponibili</th><th>PRE / POST</th></tr>
+  ${perGiorno.map(({ d, G }) => `<tr><td class="nm">${cap(dLabel(d, { weekday: 'short', day: 'numeric', month: 'short' }))}</td><td>${esc(G.p.tipo || '–')}</td><td>${G.p.rpe ?? '–'}</td><td>${fmtN(avg(G.rpes), 1)}</td>
+    <td>${G.diff == null ? '–' : `<span class="c ${Math.abs(G.diff) > 1.5 ? 'r' : Math.abs(G.diff) > 0.75 ? 'y' : 'g'}">${G.diff >= 0 ? '+' : ''}${fmtN(G.diff, 1)}</span>`}</td>
+    <td>${G.pre ? G.disp + '/' + G.A.length : '–'}</td><td>${G.pre}/${G.post}</td></tr>`).join('')}</table>
+  <div class="rt">Atleti</div>
+  <table><tr><th>Atleta</th><th>Sedute</th><th>Minuti</th><th>Carico AU</th><th>RPE medio</th><th>TQR medio</th><th>ACWR</th><th>Monotony</th><th>Strain</th><th>Giorni ND</th></tr>
+  ${rowsA.map(x => `<tr><td class="nm">${esc(x.a.nome)}</td><td>${x.sed}</td><td>${fmtN(x.min)}</td><td><b>${fmtN(x.au)}</b></td><td>${fmtN(x.rpe, 1)}</td><td>${cell('tqr', x.tqr, 1)}</td>
+    <td>${x.m.acwr == null ? '–' : `<span class="c ${x.m.giorni < 21 ? '' : acwCls(x.m.acwr)}">${fmtN(x.m.acwr, 2)}</span>`}</td>
+    <td>${x.m.mono == null ? '–' : `<span class="c ${x.m.mono > 2 ? 'r' : 'g'}">${fmtN(x.m.mono, 2)}</span>`}</td><td>${fmtN(x.m.strain)}</td><td>${x.nd || '–'}</td></tr>`).join('')}</table>
+  <div class="legend">ACWR (media 7 gg / media 28 gg): verde 0,8–1,3 · giallo fuori zona · rosso &gt; 1,5. Senza colore se ci sono meno di 3 settimane di dati. Monotony &gt; 2 = carico poco variato.</div>
+  ${piede()}</div>`;
+}
+
+function pagAtleta(id, end){
+  const a = D.atleti.find(x => x.id === id); if (!a) return '';
+  const m = metrics(id, end);
+  const sett = [3, 2, 1, 0].map(w => {
+    const fine = addDays(end, -7 * w), days = [...Array(7)].map((_, i) => addDays(fine, i - 6)), rs = days.map(d => row(d, id) || {});
+    const mm = f => avg(rs.map(r => num(r[f])).filter(v => v != null));
+    return { lab: dLabel(days[0], { day: 'numeric', month: 'short' }) + ' – ' + dLabel(fine, { day: 'numeric', month: 'short' }),
+      au: sum(rs.map(r => num(r.au) || 0)), min: sum(rs.map(r => num(r.tot) || 0)), rpe: mm('rpe'), tqr: mm('tqr'), sh: mm('sonnoH'), doms: mm('doms'), stress: mm('stress'),
+      nd: rs.filter(r => ND.includes(r.disp)).length };
+  });
+  const ultimi = [...Array(7)].map((_, i) => addDays(end, -i)).map(d => ({ d, r: row(d, id) || {} }));
+  const ndList = [...Array(28)].map((_, i) => addDays(end, -i)).map(d => ({ d, r: row(d, id) || {} })).filter(x => ND.includes(x.r.disp));
+  return `<div class="page">${testata(esc(a.nome), 'Scheda atleta · ultimi 28 giorni fino a ' + dLabel(end, { day: 'numeric', month: 'long', year: 'numeric' }))}
+  <div class="rk">${rk('Carico 7 gg', fmtN(m.s7) + ' AU', fmtN(m.min) + ' minuti')}
+    ${rk('ACWR', m.acwr == null ? '–' : fmtN(m.acwr, 2), m.giorni < 21 ? 'dati ancora pochi' : m.acwr > 1.5 ? 'carico in forte aumento' : m.acwr < 0.8 ? 'carico in calo' : 'in zona')}
+    ${rk('TQR medio 7 gg', fmtN(m.tqr, 1), 'sonno ' + fmtN(m.sonnoH, 1) + ' h')}
+    ${rk('DOMS / Stress', fmtN(m.doms, 1) + ' / ' + fmtN(m.stress, 1), 'media 7 gg')}</div>
+  <div class="rt">Andamento carico e recupero</div>
+  ${chartAtleta(id, end, 698, 170, true)}
+  <div class="rt">Per settimana</div>
+  <table><tr><th>Settimana</th><th>Carico AU</th><th>Minuti</th><th>RPE medio</th><th>TQR</th><th>Ore sonno</th><th>DOMS</th><th>Stress</th><th>Giorni ND</th></tr>
+  ${sett.map(s => `<tr><td class="nm">${s.lab}</td><td><b>${fmtN(s.au)}</b></td><td>${fmtN(s.min)}</td><td>${fmtN(s.rpe, 1)}</td><td>${cell('tqr', s.tqr, 1)}</td><td>${cell('sonnoH', s.sh, 1)}</td><td>${cell('doms', s.doms, 1)}</td><td>${cell('stress', s.stress, 1)}</td><td>${s.nd || '–'}</td></tr>`).join('')}</table>
+  <div class="rt">Ultimi 7 giorni</div>
+  <table><tr><th>Giorno</th><th>Disponibilità</th><th>TQR</th><th>Sonno</th><th>Ore</th><th>DOMS</th><th>Stress</th><th>Minuti</th><th>RPE</th><th>AU</th></tr>
+  ${ultimi.map(({ d, r }) => `<tr><td class="nm">${cap(dLabel(d, { weekday: 'short', day: 'numeric', month: 'short' }))}</td><td>${r.disp ? pill(r.disp) : '<span class="muted">–</span>'}</td>
+    <td>${cell('tqr', num(r.tqr))}</td><td>${cell('sonnoQ', num(r.sonnoQ))}</td><td>${cell('sonnoH', num(r.sonnoH))}</td><td>${cell('doms', num(r.doms))}</td><td>${cell('stress', num(r.stress))}</td>
+    <td>${num(r.tot) ?? '–'}</td><td>${num(r.rpe) ?? '–'}</td><td><b>${fmtN(num(r.au))}</b></td></tr>`).join('')}</table>
+  ${ndList.length ? `<div class="note"><b>Non disponibile</b> negli ultimi 28 giorni: ${ndList.map(x => dLabel(x.d, { day: 'numeric', month: 'short' }) + ' (' + esc(x.r.disp.toLowerCase()) + ')').join(', ')}</div>` : ''}
+  ${piede()}</div>`;
+}
+
+async function scaricaPdf(){
+  const btn = $('#pdfBtn'); btn.disabled = true; btn.textContent = 'Creo il PDF…';
+  const nome = { giorno: 'giornaliero_' + cur, settimana: 'settimana_' + lunedi(cur), atleta: 'atleta_' + repAtleta + '_' + cur, completo: 'completo_' + cur }[repTipo];
+  // copia delle pagine in un contenitore pulito: 794×1123 px per pagina (A4)
+  const box = document.createElement('div');
+  box.className = 'pdf';
+  box.style.cssText = 'width:794px;background:#fff';
+  box.innerHTML = $('#rep').innerHTML;
+  document.body.appendChild(box);
+  try {
+    if (!window.html2pdf) throw new Error('libreria PDF non caricata');
+    await html2pdf().set({
+      margin: 0, filename: 'Report_' + SQUADRA + '_' + nome + '.pdf',
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0 },
+      jsPDF: { unit: 'px', format: [794, 1123], orientation: 'portrait', hotfixes: ['px_scaling'] },
+      pagebreak: { mode: [] }
+    }).from(box).save();
+  } catch (e) { toast('Errore PDF: ' + e.message); }
+  box.remove();
+  btn.disabled = false; btn.textContent = 'Scarica PDF';
+}
+
+start();
+</script>
+</body>
+</html>
