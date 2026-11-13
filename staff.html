@@ -177,10 +177,11 @@ async function enter(){
 async function load(){
   const oggi = iso(new Date());
   const da = addDays(oggi, -150);
-  const [a, p, g] = await Promise.all([
+  const [a, p, g, ps] = await Promise.all([
     sb.from('atleti').select('*').order('id'),
     sb.from('programmazione').select('*'),
-    sb.from('v_giornaliero').select('*').gte('data', da).order('data')
+    sb.from('v_giornaliero').select('*').gte('data', da).order('data'),
+    sb.from('push_sub').select('atleta_id')
   ]);
   const err = a.error || p.error || g.error;
   if (err) { $('#app').innerHTML = `<div class="loading">Errore: ${esc(err.message)}</div>`; return; }
@@ -190,8 +191,9 @@ async function load(){
     pre_at: r.pre_at, post_at: r.post_at, staff_at: r.staff_at
   }));
   const idx = {}; righe.forEach(r => idx[r.data + '|' + r.id] = r);
-  const prog = {}; p.data.forEach(x => prog[x.data] = { tipo: x.tipo, rpe: num(x.rpe_obiettivo) });
-  D = { oggi, atleti: a.data.map(x => Object.assign(x, { link: ATLETA_URL + '?a=' + encodeURIComponent(x.id) + '&t=' + x.token })), righe, idx, prog };
+  const prog = {}; p.data.forEach(x => prog[x.data] = { tipo: x.tipo, rpe: num(x.rpe_obiettivo), postAperto: x.post_aperto_at });
+  const push = new Set((ps.data || []).map(x => x.atleta_id));
+  D = { oggi, atleti: a.data.map(x => Object.assign(x, { link: ATLETA_URL + '?a=' + encodeURIComponent(x.id) + '&t=' + x.token })), righe, idx, prog, push };
   if (!cur) cur = oggi;
   if (!repAtleta && D.atleti.length) repAtleta = D.atleti[0].id;
   render();
@@ -279,6 +281,7 @@ function vGiorno(){
     ${kpi('Carico medio', fmtN(avg(G.aus)) + '<small> AU</small>', 'totale ' + fmtN(sum(G.aus)) + ' AU')}
     ${kpi('TQR medio', fmtN(G.tqr, 1), G.disp + ' disponibili')}
   </div>
+  ${pannelloPost(G)}
   <div class="panel">
     <div class="ph"><h2>Atleti</h2>
       <div class="row"><label>Minuti a tutti i disponibili</label>
@@ -302,6 +305,40 @@ function vGiorno(){
     </table></div>
   </div>`;
 }
+/* ---------- POST: apertura e notifica ---------- */
+function pannelloPost(G){
+  const ap = G.p.postAperto, ora = ap ? new Date(ap).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '';
+  const daFare = G.R.filter(x => num(x.r.rpe) == null && !ND.includes(x.r.disp));
+  const conNotifica = daFare.filter(x => D.push.has(x.a.id)).length;
+  const passato = cur < addDays(D.oggi, -1);
+  return `<div class="panel"><div class="ph">
+    <div><h2>${ap ? '🔓 POST aperto' : '🔒 POST chiuso'}</h2>
+      <div class="sub" style="margin-top:4px">${ap
+        ? `Aperto alle ${ora} · mancano ${daFare.length} POST (${conNotifica} con notifiche attive)`
+        : passato ? 'Giornata passata: gli atleti possono compilare solo oggi e ieri.' : 'Gli atleti vedono solo il PRE. Aprilo a fine allenamento: chi ha attivato le notifiche riceve l\'avviso.'}</div></div>
+    <div class="row">${ap
+      ? `<button class="btn ghost" onclick="avvisaPost()" ${daFare.length ? '' : 'disabled'}>Avvisa di nuovo</button><button class="btn ghost" onclick="apriPost(false)">Richiudi</button>`
+      : `<button class="btn acc" onclick="apriPost(true)" ${passato ? 'disabled' : ''}>Apri POST e avvisa gli atleti</button>`}</div>
+  </div></div>`;
+}
+async function apriPost(aperto){
+  const { error } = await sb.rpc('apri_post', { p_data: cur, p_aperto: aperto });
+  if (error) return toast('Errore: ' + error.message);
+  if (!aperto) { toast('POST richiuso'); return load(); }
+  await load();
+  avvisaPost(true);
+}
+async function avvisaPost(primaVolta){
+  toast('Invio notifiche…');
+  try {
+    const { data, error } = await sb.functions.invoke('notifica-post', { body: { data: cur } });
+    if (error) throw error;
+    toast((primaVolta ? 'POST aperto · ' : '') + (data.atleti ? 'notifica inviata a ' + data.atleti + (data.atleti === 1 ? ' atleta' : ' atleti') : 'nessun atleta con notifiche attive da avvisare'));
+  } catch (e) {
+    toast((primaVolta ? 'POST aperto, ma ' : '') + 'notifiche non inviate (funzione notifica-post non attiva?)');
+  }
+}
+
 async function bulk(){
   const v = { w: $('#bW').value, v: $('#bV').value, tp: $('#bTP').value, g: $('#bG').value };
   const cols = { w: 'min_w', v: 'min_v', tp: 'min_tp', g: 'min_g' };
@@ -416,12 +453,13 @@ function vAtleti(){
     <div class="pb"><div class="sec" style="margin-top:0">PRE (${mancaPre.length})</div><div class="row" style="margin-top:8px">${mancaPre.map(a => `<a class="btn ghost" target="_blank" href="${wa(a, '⏰ Ciao ' + a.nome.split(' ')[0] + ', manca il tuo PRE di oggi:')}">${esc(a.nome)}</a>`).join('') || '<span class="muted">Nessuno 👍</span>'}</div>
     <div class="sec">POST (${mancaPost.length})</div><div class="row" style="margin-top:8px">${mancaPost.map(a => `<a class="btn ghost" target="_blank" href="${wa(a, '⏰ Ciao ' + a.nome.split(' ')[0] + ', manca il tuo POST di oggi:')}">${esc(a.nome)}</a>`).join('') || '<span class="muted">Nessuno 👍</span>'}</div></div></div>
   <div class="panel"><div class="ph"><h2>Link personali</h2><span class="sub">Ogni atleta salva il suo link sulla schermata Home del telefono</span></div>
-  <div class="scroll"><table><tr><th>Atleta</th><th>Attivo</th><th>Link</th><th></th></tr>
+  <div class="scroll"><table><tr><th>Atleta</th><th>Attivo</th><th>Notifiche</th><th>Link</th><th></th></tr>
   ${D.atleti.map(a => `<tr><td class="nm">${esc(a.nome)}<small>${esc(a.id)} · ${esc(a.categoria || '')}</small></td>
     <td><input type="checkbox" ${a.attivo ? 'checked' : ''} onchange="setAttivo('${esc(a.id)}', this.checked)"></td>
+    <td>${D.push.has(a.id) ? '<span class="pill p-ok"><i></i>Attive</span>' : '<span class="pill p-no">No</span>'}</td>
     <td style="text-align:left;max-width:320px;overflow:hidden;text-overflow:ellipsis" class="muted">${esc(a.link)}</td>
     <td><button class="btn ghost" onclick="copy('${esc(a.link)}')">Copia</button>
-        <a class="btn ghost" target="_blank" href="${wa(a, 'Ciao ' + a.nome.split(' ')[0] + '! Questo è il tuo link per il monitoraggio PRE/POST, salvalo sulla Home del telefono:')}">WhatsApp</a></td></tr>`).join('')}
+        <a class="btn ghost" target="_blank" href="${wa(a, 'Ciao ' + a.nome.split(' ')[0] + '! Questo è il tuo link per il monitoraggio PRE/POST. Aprilo, aggiungilo alla schermata Home e attiva le notifiche: ti avviso io quando si apre il POST.')}">WhatsApp</a></td></tr>`).join('')}
   </table></div></div>
   <div class="panel"><div class="ph"><h2>Nuovo atleta</h2></div><div class="pb row">
     <input id="nId" placeholder="ID (es. ROSSI)" style="text-transform:uppercase"><input id="nNome" placeholder="Nome e cognome">
