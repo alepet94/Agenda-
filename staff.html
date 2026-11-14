@@ -115,7 +115,7 @@
   .teams button.on{background:var(--c);border-color:var(--c);color:#fff}
   .teams button.on small{color:rgba(255,255,255,.8)}
   nav button.on{background:var(--team,var(--ink))}
-  .dr.wide{width:min(860px,100%)}
+  .dr.wide{width:min(1100px,100%)}
   .pl td{padding:6px 6px} .pl input.num{width:58px;padding:6px}
   .sqtag{display:inline-block;font-size:10.5px;font-weight:800;color:#fff;border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:1px}
   .chip{font:inherit;font-size:12px;font-weight:700;border:1.5px solid var(--line);background:var(--soft);color:var(--mute);border-radius:999px;padding:4px 10px;cursor:pointer;margin-right:4px}
@@ -251,7 +251,7 @@ async function load(){
   const righe = g.data.map(r => ({
     data: r.data, id: r.atleta_id, tqr: r.tqr, sonnoQ: r.sonno_q, sonnoH: num(r.sonno_h), doms: r.doms, stress: r.stress, disp: r.disp,
     w: r.min_w, v: r.min_v, tp: r.min_tp, g: r.min_g, tot: r.min_tot, rpe: r.rpe, au: num(r.carico_au), stato: r.stato,
-    pre_at: r.pre_at, post_at: r.post_at, staff_at: r.staff_at, sq: r.squadra_giorno, sqSet: r.squadra
+    pre_at: r.pre_at, post_at: r.post_at, staff_at: r.staff_at, sq: r.squadra_giorno, sqSet: r.squadra, nota: r.nota || ''
   }));
   const idx = {}; righe.forEach(r => idx[r.data + '|' + r.id] = r);
   const prog = {}; p.data.forEach(x => (prog[x.squadra] = prog[x.squadra] || {})[x.data] = { tipo: x.tipo, rpe: num(x.rpe_obiettivo), postAperto: x.post_aperto_at, inizio: (x.ora_inizio || '').slice(0, 5), fine: (x.ora_fine || '').slice(0, 5) });
@@ -371,7 +371,7 @@ function vGiorno(){
       <tr><th>Atleta</th><th>PRE</th><th>POST</th><th>Disponibilità</th><th>TQR</th><th>Sonno</th><th>Ore</th><th>DOMS</th><th>Stress</th>
           <th>W</th><th>V</th><th>TP</th><th>G</th><th>Tot</th><th>RPE</th><th>AU</th></tr>
       ${G.R.map(({ a, r }) => `<tr class="click" onclick="edit('${esc(a.id)}')">
-        <td class="nm">${esc(a.nome)}${doppio(a.id) ? sqTag(squadreDi(a.id).find(x => x !== SQ), 'anche ') : ''}<small>${esc(a.id)}${r.staff_at ? ' · modificato dallo staff' : ''}</small></td>
+        <td class="nm">${esc(a.nome)}${doppio(a.id) ? sqTag(squadreDi(a.id).find(x => x !== SQ), 'anche ') : ''}<small>${esc(a.id)}${r.staff_at ? ' · modificato dallo staff' : ''}${r.nota ? ' · 📝 nota' : ''}</small></td>
         <td><span class="dot ${num(r.tqr) != null ? 'on' : ''}"></span></td>
         <td><span class="dot ${num(r.rpe) != null ? 'on' : ''}"></span></td>
         <td>${pill(r.disp)}</td>
@@ -453,6 +453,8 @@ function edit(id){
     <div class="grid2">${f('w', 'W · Weights')}${f('v', 'V · Vitamins')}${f('tp', 'TP · Team practice')}${f('g', 'G · Game')}</div>
     <div class="sec">Carico (POST)</div>
     <div class="grid2">${f('rpe', 'RPE (0-10)')}</div>
+    <div class="sec">Nota per l'atleta</div>
+    <textarea id="f_nota" maxlength="500" rows="3" placeholder="La vede solo ${esc(a.nome.split(' ')[0])} nel suo calendario" style="width:100%;margin-top:8px;font:inherit;border:1px solid var(--line);border-radius:9px;padding:9px;background:var(--soft)">${esc(r.nota || '')}</textarea>
     <div class="sec">Ultimi 28 giorni</div>
     ${chartAtleta(id, cur, 400, 110)}
     <div style="display:flex;gap:8px;margin-top:20px"><button class="btn" onclick="saveDr('${esc(id)}')">Salva</button><button class="btn ghost" onclick="closeDr()">Annulla</button></div>
@@ -464,6 +466,7 @@ async function saveDr(id){
   const o = { data: cur, atleta_id: id };
   Object.keys(map).forEach(k => { const v = $('#f_' + k).value; o[map[k]] = v === '' ? null : +v; });
   o.disp = $('#f_disp').value || null;
+  o.nota = $('#f_nota').value.trim() || null;
   try { await salvaRighe([o]); okToast('Salvato'); closeDr(); load(); }
   catch (e) { toast('Errore: ' + (e.message.includes('check') ? 'un valore è fuori scala' : e.message)); }
 }
@@ -545,23 +548,24 @@ function pianifica(k){
     <h3>${cap(dLabel(k))}</h3>
     <div class="sub" style="margin-top:6px">Minuti previsti per ogni giocatore: W = Weights · V = Vitamins · TP = Team practice · G = Game. Il carico AU si calcola con l'RPE del POST.</div>
     <div class="scroll" style="margin-top:14px"><table class="pl">
-      <tr><th>Giocatore</th><th>Si allena con</th>${MIN.map(m => `<th title="${m[3]}">${m[2]}</th>`).join('')}<th>Tot</th></tr>
+      <tr><th>Giocatore</th><th>Si allena con</th>${MIN.map(m => `<th title="${m[3]}">${m[2]}</th>`).join('')}<th>Tot</th><th style="text-align:left">Nota per l'atleta <small class="muted">(la vede solo lui)</small></th></tr>
       <tr style="background:var(--soft)"><td class="nm">Tutti<small>compila e premi ↓</small></td><td></td>
         ${MIN.map(m => `<td><input class="num" type="number" min="0" inputmode="numeric" id="all_${m[0]}"></td>`).join('')}
-        <td><button class="btn ghost" style="padding:6px 10px" onclick="copiaTutti()">↓ Copia</button></td></tr>
+        <td><button class="btn ghost" style="padding:6px 10px" onclick="copiaTutti()">↓ Copia</button></td><td></td></tr>
       ${lista.map(a => { const r = row(k, a.id) || {}; const sqs = squadreDi(a.id); const qui = sqDi(a.id, k);
         return `<tr data-id="${esc(a.id)}"${qui !== SQ ? ' style="opacity:.55"' : ''}>
           <td class="nm">${esc(a.nome)}<small>${esc(a.id)}${ND.includes(r.disp) ? ' · ' + esc(r.disp.toLowerCase()) : ''}</small></td>
           <td>${sqs.length > 1 ? `<select data-k="sq" onchange="this.closest('tr').style.opacity = this.value === SQ ? 1 : .55">${sqs.map(x => `<option value="${esc(x)}" ${x === qui ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>` : sqTag(sqs[0])}</td>
           ${MIN.map(m => `<td><input class="num" type="number" min="0" inputmode="numeric" data-k="${m[0]}" value="${r[m[0]] ?? ''}" oninput="totRiga(this)"></td>`).join('')}
-          <td><b class="tot">${num(r.tot) ?? '–'}</b></td></tr>`; }).join('')}
+          <td><b class="tot">${num(r.tot) ?? '–'}</b></td>
+          <td><input data-k="nota" maxlength="500" value="${esc(r.nota || '')}" placeholder="es. porta le scarpe da corsa" style="width:230px"></td></tr>`; }).join('')}
     </table></div>
     <div class="sub" style="margin-top:8px">I giocatori in grigio quel giorno si allenano con l'altra squadra: compaiono nella sua Giornata.</div>
     <div style="display:flex;gap:8px;margin-top:18px"><button class="btn" onclick="salvaPiano('${k}')">Salva programmazione</button><button class="btn ghost" onclick="closeDr()">Annulla</button></div>
   </div></div>`;
 }
 function totRiga(el){
-  const tr = el.closest('tr'), v = [...tr.querySelectorAll('input[data-k]')].map(i => num(i.value) || 0), t = sum(v);
+  const tr = el.closest('tr'), v = [...tr.querySelectorAll('input.num[data-k]')].map(i => num(i.value) || 0), t = sum(v);
   tr.querySelector('.tot').textContent = t || '–';
 }
 function copiaTutti(){
@@ -575,6 +579,7 @@ async function salvaPiano(k){
     const sel = tr.querySelector('select[data-k=sq]');
     o.squadra = sel ? sel.value : null;
     MIN.forEach(m => { const v = tr.querySelector(`input[data-k=${m[0]}]`).value; o[m[1]] = v === '' ? null : +v; });
+    o.nota = tr.querySelector('input[data-k=nota]').value.trim() || null;
     return o;
   });
   const { error } = await sb.from('giornaliero').upsert(rows, { onConflict: 'data,atleta_id' });
