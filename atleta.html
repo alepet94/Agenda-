@@ -69,7 +69,7 @@
   .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;
        padding:12px 18px;border-radius:12px;font-weight:600;opacity:0;transition:.25s;pointer-events:none}
   .toast.show{opacity:1}
-  .hidden{display:none}
+  .hidden{display:none!important}
   .loading{color:var(--mute);text-align:center;padding:40px}
   .pw{display:flex;align-items:center;justify-content:center;gap:8px;margin:28px 0 8px;color:var(--mute);font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
   .pw img{width:30px;height:30px;border-radius:7px;display:block}
@@ -89,6 +89,15 @@
   .notif p{margin:0;font-size:13.5px;line-height:1.4;flex:1}
   .notif .btn{border:0;border-radius:10px;background:var(--acc);color:#fff;font:inherit;font-weight:700;padding:10px 12px;cursor:pointer;white-space:nowrap}
   .notif.on{background:var(--ok-soft);border-color:#bfe6d0}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .topbtn{font:inherit;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:8px 12px;cursor:pointer;white-space:nowrap}
+  .topbtn.acc{background:var(--acc);border-color:var(--acc);color:#fff}
+  .stato{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
+  .stato span{font-size:13px;font-weight:700;border-radius:999px;padding:6px 11px;background:var(--card);border:1px solid var(--line)}
+  .stato span.ok{color:var(--ok);background:var(--ok-soft);border-color:#bfe6d0}
+  .stato span.lock{color:var(--mute)}
+  .stato span.go{color:#fff;background:var(--acc);border-color:var(--acc);cursor:pointer}
+  #cal .notif{margin-top:10px}
   .cal-h{display:flex;align-items:center;justify-content:space-between;margin:26px 0 10px}
   .cal-h h2{margin:0;font-size:20px;font-weight:800;letter-spacing:-.01em}
   .cal-h .nav{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--mute);font-weight:600}
@@ -113,7 +122,7 @@
 <body>
 <div class="wrap">
   <header>
-    <div class="hello" id="hello">Monitoraggio</div>
+    <div class="top"><div class="hello" id="hello">Monitoraggio</div><button class="topbtn hidden" id="vistaBtn" onclick="cambiaVista()"></button></div>
     <h1 id="ciao">Ciao</h1>
     <div class="days" id="days"></div>
   </header>
@@ -174,6 +183,7 @@
 
   <!-- CALENDARIO SETTIMANALE -->
   <section id="cal" class="hidden">
+    <div id="calStato"></div>
     <div class="cal-h"><h2>La tua settimana</h2>
       <div class="nav"><button id="calPrev" onclick="settimana(-7)">‹</button><span id="calLab"></span><button id="calNext" onclick="settimana(7)">›</button></div></div>
     <div id="calBody"></div>
@@ -251,7 +261,7 @@ function renderDays(){
     const sm = document.createElement('small'); sm.textContent = l;
     const bb = document.createElement('b'); bb.textContent = fmt(k);
     b.append(sm, bb);
-    b.onclick = () => { day = k; renderDays(); render(); };
+    b.onclick = () => { day = k; vistaManuale = true; vista = 'q'; renderDays(); render(); };
     box.appendChild(b);
   });
 }
@@ -276,7 +286,34 @@ function render(){
     $('doneTxt').textContent = nd ? 'PRE inviato · ' + fmt(day) : 'Giornata completa · ' + fmt(day);
     $('doneSub').textContent = nd ? 'Sei segnato come ' + st.disp.toLowerCase() + ': il POST non serve. Rimettiti presto!' : 'PRE e POST inviati. Grazie!';
   }
+  if (!vistaManuale) vista = (f === 'pre' || f === 'post') ? 'q' : 'cal';
+  applicaVista(st, f);
   renderNotif();
+}
+
+/* ---------- due schermate: questionario e calendario ---------- */
+let vista = 'q', vistaManuale = false, ultimaFase = null;
+function applicaVista(st, f){
+  const q = vista === 'q' || !calCaricato;
+  ['days', 'steps'].forEach(id => $(id).classList.toggle('hidden', !q));
+  if (!q) ['pre', 'wait', 'post', 'done'].forEach(x => $(x).classList.add('hidden'));
+  $('cal').classList.toggle('hidden', q || !calCaricato);
+  const b = $('vistaBtn'); b.classList.toggle('hidden', !calCaricato);
+  const daFare = f === 'pre' || f === 'post';
+  b.className = 'topbtn' + (!q && daFare ? ' acc' : '') + (calCaricato ? '' : ' hidden');
+  b.textContent = q ? '📅 Calendario settimanale' : daFare ? '✏️ Compila il ' + f.toUpperCase() : '📝 PRE / POST';
+  // riepilogo sopra il calendario
+  const nd = ND.includes(st.disp);
+  const pill = (cls, t, go) => `<span class="${cls}"${go ? ' onclick="cambiaVista()"' : ''}>${t}</span>`;
+  $('calStato').innerHTML = `<div class="stato">
+      ${st.pre ? pill('ok', 'PRE ✓') : pill('go', 'PRE da compilare ›', true)}
+      ${st.post ? pill('ok', 'POST ✓') : nd ? pill('lock', 'POST non richiesto') : st.post_aperto ? pill('go', 'POST da compilare ›', true) : pill('lock', '🔒 POST a fine allenamento')}
+    </div>${!st.post && !nd && st.pre ? '<div class="notifBox"></div>' : ''}`;
+}
+function cambiaVista(){
+  vista = vista === 'q' ? 'cal' : 'q';
+  vistaManuale = true;
+  render(); window.scrollTo(0, 0);
 }
 
 /* ---------- notifiche push ---------- */
@@ -328,7 +365,7 @@ function sendPre(){
   rpc('invia_pre', Object.assign(pid(), { p_data: day, p_tqr: S.tqr, p_sonno_q: S.sonnoQ, p_sonno_h: S.sonnoH, p_doms: S.doms, p_stress: S.stress, p_disp: S.disp }))
     .then(() => {
       Object.assign(state.stato[day], { pre: true, disp: S.disp });
-      b.textContent = 'Invia PRE'; toast('PRE inviato'); render(); window.scrollTo(0, 0);
+      b.textContent = 'Invia PRE'; toast('PRE inviato'); vistaManuale = false; render(); window.scrollTo(0, 0);
     }).catch(e => { b.disabled = false; b.textContent = 'Invia PRE'; toast(e.message); });
 }
 function sendPost(){
@@ -336,7 +373,7 @@ function sendPost(){
   rpc('invia_post', Object.assign(pid(), { p_data: day, p_rpe: P.rpe }))
     .then(() => {
       state.stato[day].post = true;
-      b.textContent = 'Invia POST'; toast('POST inviato'); render(); window.scrollTo(0, 0);
+      b.textContent = 'Invia POST'; toast('POST inviato'); vistaManuale = false; render(); window.scrollTo(0, 0);
     }).catch(e => { b.disabled = false; b.textContent = 'Invia POST'; toast(e.message); carica(); });
 }
 
@@ -344,7 +381,7 @@ function sendPost(){
 const TIPO = { ALLENAMENTO: ['Allenamento', '#1f9d62'], GARA: ['Gara', '#e8642c'], RIPOSO: ['Riposo', '#8a8f98'] };
 const COL_SQ = { U19: '#e8642c', U17: '#2f6fd6' };
 const MIN = [['w', 'W', 'Weights'], ['v', 'V', 'Vitamins'], ['tp', 'TP', 'Team practice'], ['g', 'G', 'Game']];
-let calDa = null, calOggi = null;
+let calDa = null, calOggi = null, calCaricato = false;
 function addG(k, n){ const d = new Date(k + 'T12:00:00'); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 async function caricaCal(){
   try {
@@ -373,7 +410,9 @@ function renderCal(c){
       ${mins.length ? `<div class="mins">${mins.map(m => `<span title="${m[2]}"><b>${m[1]}</b> ${g[m[0]]}'</span>`).join('')}${mins.length > 1 ? `<span>Tot <b>${tot}'</b></span>` : ''}</div>` : '<div class="vuoto">Dettagli in arrivo dal preparatore</div>'}`;
     return `<div class="gg${cls}"><div class="dt"><small>${f(g.data, { weekday: 'short' }).replace('.', '')}</small><b>${f(g.data, { day: 'numeric' })}</b></div><div class="bd">${corpo}</div></div>`;
   }).join('') + '<div class="hint" style="margin:4px 2px 0">W = Weights · V = Vitamins · TP = Team practice · G = Game (minuti)</div>';
-  $('cal').classList.remove('hidden');
+  const primoCal = !calCaricato;
+  calCaricato = true;
+  if (primoCal && state) render();
 }
 
 /* ---------- caricamento ---------- */
@@ -387,6 +426,8 @@ async function carica(){
     const primo = !state;
     state = s;
     if (primo || ![s.oggi, s.ieri].includes(day)) day = s.oggi;
+    const fz = fase(s.stato[day]);
+    if (fz !== ultimaFase) { vistaManuale = false; ultimaFase = fz; }
     if ($('loading')) $('loading').remove();
     renderDays(); render();
     caricaCal();
