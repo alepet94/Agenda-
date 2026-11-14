@@ -4,6 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agenda · Staff</title>
+<link rel="icon" type="image/png" href="staff-icon-32.png">
+<link rel="apple-touch-icon" href="staff-icon-192.png">
+<link rel="manifest" href="manifest-staff.json">
+<meta name="apple-mobile-web-app-title" content="Agenda Staff">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -105,6 +109,31 @@
   .rf .pb5{display:flex;align-items:center;gap:8px;color:#6b6f78;font-size:10px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;white-space:nowrap}
   .rf .pb5 img{width:36px;height:36px;border-radius:8px}
   .rf .rl{line-height:1.5}
+  /* ---------- MODALITÀ MARLA (easter egg) ---------- */
+  .eggbtn{border:1px solid var(--line);background:var(--card);border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer;line-height:1;transition:transform .2s}
+  .eggbtn.on{background:#1b2a3d;border-color:#1b2a3d;transform:rotate(-12deg)}
+  .hrow{display:flex;align-items:center;gap:10px}
+  .saluto{font-size:13px;color:var(--acc);font-weight:600;margin-top:4px}
+  .alp{position:fixed;left:0;right:0;bottom:0;height:42vh;pointer-events:none;z-index:0;opacity:0;transition:opacity .6s}
+  body.egg .alp{opacity:1}
+  .wrap,#drawer,.toast{position:relative;z-index:1}
+  .toast{position:fixed}
+  .alt{font-size:12px;font-weight:700;color:#4a6a8a;background:#e6eef5;border-radius:999px;padding:5px 10px}
+  .peek{position:fixed;bottom:-200px;left:50%;width:170px;margin-left:-85px;z-index:20;transition:bottom .5s cubic-bezier(.3,1.5,.6,1);pointer-events:none}
+  .peek.up{bottom:-40px}
+  .corsa{position:fixed;bottom:18px;left:-180px;z-index:20;pointer-events:none;display:flex;align-items:flex-end;gap:4px;animation:corsa 4.2s linear forwards}
+  .corsa .h{width:120px;animation:testa .35s ease-in-out infinite alternate}
+  .corsa .b{width:46px;animation:palleggio .42s cubic-bezier(.5,0,.5,1) infinite alternate}
+  @keyframes corsa{to{left:calc(100% + 40px)}}
+  @keyframes testa{to{transform:translateY(-6px) rotate(3deg)}}
+  @keyframes palleggio{from{transform:translateY(-70px)}to{transform:translateY(0)}}
+  .timbro{position:fixed;left:50%;top:38%;z-index:30;transform:translate(-50%,-50%) rotate(-8deg) scale(.3);opacity:0;pointer-events:none;
+    border:5px solid #e8642c;color:#e8642c;border-radius:16px;padding:14px 26px;font-size:30px;font-weight:800;background:rgba(255,255,255,.92);
+    transition:all .35s cubic-bezier(.3,1.6,.6,1);text-align:center}
+  .timbro small{display:block;font-size:13px;color:#6b6f78;font-weight:600;margin-top:2px}
+  .timbro.show{opacity:1;transform:translate(-50%,-50%) rotate(-8deg) scale(1)}
+  .zampa{position:fixed;top:-40px;z-index:25;font-size:24px;pointer-events:none;animation:cade linear forwards}
+  @keyframes cade{to{transform:translateY(110vh) rotate(260deg)}}
   @media (max-width:640px){ .datebar .d{min-width:0;font-size:16px} .datebar .tag{margin-left:0} }
 </style>
 </head>
@@ -167,7 +196,9 @@ async function enter(){
   const { data: ok } = await sb.rpc('is_staff');
   if (!ok) { await sb.auth.signOut(); return showLogin('Questo account non è abilitato come staff.'); }
   $('#root').innerHTML = `<div class="wrap"><header>
-    <div><div class="sub">Monitoraggio basket · ${esc(SQUADRA)}</div><h1>Agenda · Staff</h1></div>
+    <div><div class="sub">Monitoraggio basket · ${esc(SQUADRA)}</div>
+      <div class="hrow"><h1 id="titolo">Agenda · Staff</h1><button class="eggbtn${EGG ? ' on' : ''}" id="eggBtn" onclick="toggleEgg()" title="Modalità Marla">🐾</button></div>
+      <div class="saluto" id="saluto"></div></div>
     <nav>
       <button data-v="giorno" class="on">Giornata</button><button data-v="squadra">Carichi</button>
       <button data-v="prog">Programmazione</button><button data-v="atleti">Atleti</button>
@@ -177,11 +208,14 @@ async function enter(){
     if (b.dataset.v === 'esci') { await sb.auth.signOut(); return showLogin(); }
     view = b.dataset.v; document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b)); render();
   });
+  $('#titolo').onclick = cliccaTitolo;
+  applicaEgg();
   load();
 }
 
 /* ---------- DATI ---------- */
 async function load(){
+  if (EGG && !D) { const l = $('#app .loading'); if (l) l.textContent = pick(CARICAMENTI); }
   const oggi = iso(new Date());
   const da = addDays(oggi, -150);
   const [a, p, g, ps] = await Promise.all([
@@ -210,7 +244,7 @@ async function salvaRighe(list){
   const { error } = await sb.from('giornaliero').upsert(rows, { onConflict: 'data,atleta_id' });
   if (error) throw error;
 }
-function render(){ ({ giorno: vGiorno, squadra: vSquadra, prog: vProg, atleti: vAtleti, report: vReport })[view](); }
+function render(){ ({ giorno: vGiorno, squadra: vSquadra, prog: vProg, atleti: vAtleti, report: vReport })[view](); if (view === 'giorno') controllaApprovazione(); }
 
 /* ---------- semafori ---------- */
 const col = {
@@ -233,7 +267,7 @@ function kpi(l, v, n, frac){
 function go(n){ cur = addDays(cur, n); render(); }
 function datebar(label, step, extra){
   return `<div class="datebar"><button onclick="go(-${step})">‹</button><div class="d">${label}</div><button onclick="go(${step})">›</button>
-    <button class="today" onclick="cur=D.oggi;render()">Oggi</button>${extra || ''}</div>`;
+    <button class="today" onclick="cur=D.oggi;render()">Oggi</button>${EGG ? '<span class="alt">⛰️ 1001 m s.l.m.</span>' : ''}${extra || ''}</div>`;
 }
 
 /* ---------- calcoli ---------- */
@@ -361,7 +395,7 @@ async function bulk(){
   const ids = attivi().filter(a => !ND.includes((row(cur, a.id) || {}).disp)).map(a => a.id);
   try {
     await salvaRighe(ids.map(id => { const o = { data: cur, atleta_id: id }; keys.forEach(k => o[cols[k]] = +v[k]); return o; }));
-    toast('Minuti salvati per ' + ids.length + ' atleti'); load();
+    okToast('Minuti salvati per ' + ids.length + ' atleti'); load();
   } catch (e) { toast('Errore: ' + e.message); }
 }
 
@@ -392,7 +426,7 @@ async function saveDr(id){
   const o = { data: cur, atleta_id: id };
   Object.keys(map).forEach(k => { const v = $('#f_' + k).value; o[map[k]] = v === '' ? null : +v; });
   o.disp = $('#f_disp').value || null;
-  try { await salvaRighe([o]); toast('Salvato'); closeDr(); load(); }
+  try { await salvaRighe([o]); okToast('Salvato'); closeDr(); load(); }
   catch (e) { toast('Errore: ' + (e.message.includes('check') ? 'un valore è fuori scala' : e.message)); }
 }
 
@@ -427,7 +461,7 @@ function vSquadra(){
     <div class="scroll"><table><tr><th>Atleta</th><th>Carico 7 gg</th><th>ACWR</th><th>Monotony</th><th>Strain</th><th>TQR medio 7 gg</th><th>Giorni registrati (28)</th></tr>
     ${attivi().map(a => { const m = metrics(a.id, cur); return `<tr class="click" onclick="repTipo='atleta';repAtleta='${esc(a.id)}';document.querySelector('nav button[data-v=report]').click()">
       <td class="nm">${esc(a.nome)}<small>${esc(a.id)} · apri report</small></td><td><b>${fmtN(m.s7)}</b></td>
-      <td>${m.acwr == null ? '–' : m.giorni < 21 ? `<span class="muted">${fmtN(m.acwr, 2)}*</span>` : `<span class="c ${acwCls(m.acwr)}">${fmtN(m.acwr, 2)}</span>`}</td>
+      <td>${m.acwr == null ? '–' : m.giorni < 21 ? `<span class="muted">${fmtN(m.acwr, 2)}*</span>` : `<span class="c ${acwCls(m.acwr)}"${EGG && m.acwr > 1.5 ? ' title="Carico da ferrata: piano con la salita ⛰️"' : ''}>${fmtN(m.acwr, 2)}</span>`}</td>
       <td>${m.mono == null ? '–' : `<span class="c ${m.mono > 2 ? 'r' : 'g'}">${fmtN(m.mono, 2)}</span>`}</td>
       <td>${fmtN(m.strain)}</td><td>${cell('tqr', m.tqr, 1)}</td><td class="muted">${m.giorni}</td></tr>`; }).join('')}
     </table></div><div class="sub" style="padding:10px 16px">* ACWR poco affidabile finché non ci sono circa 3-4 settimane di dati.</div></div>`;
@@ -455,7 +489,7 @@ async function saveProg(k){
   const t = $('#t_' + k).value || null, r = $('#r_' + k).value, i = $('#i_' + k).value || null, f = $('#f_' + k).value || null;
   const { error } = await sb.from('programmazione').upsert({ data: k, tipo: t, rpe_obiettivo: r === '' ? null : +r, ora_inizio: i, ora_fine: f });
   if (error) return toast('Errore: ' + error.message);
-  toast('Programmazione salvata'); load();
+  okToast('Programmazione salvata'); load();
 }
 
 /* ---------- ATLETI ---------- */
@@ -619,6 +653,111 @@ async function scaricaPdf(){
   } catch (e) { toast('Errore PDF: ' + e.message); }
   box.remove();
   btn.disabled = false; btn.textContent = 'Scarica PDF';
+}
+
+/* =====================================================================
+   MODALITÀ MARLA — easter egg solo per la pagina staff (mai nei report)
+   ===================================================================== */
+const MARLA_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="60 120 390 310"><!-- orecchie (a rosa, all\'indietro) -->   <path d="M168 168 Q96 150 70 196 Q112 196 140 222 Q156 196 168 168 Z" fill="#cdb894"/>   <path d="M150 182 Q112 182 96 198 Q122 200 140 214 Z" fill="#a8896a"/>   <path d="M330 160 Q404 132 438 176 Q394 180 366 206 Q348 182 330 160 Z" fill="#cdb894"/>   <path d="M352 172 Q392 164 412 180 Q386 186 366 198 Z" fill="#a8896a"/>   <!-- testa -->   <path d="M170 160 Q250 108 334 156 Q352 230 318 300 Q288 344 250 412 Q244 420 238 412 Q204 344 178 300 Q146 230 170 160 Z" fill="#efe5d2"/>   <!-- muso più chiaro -->   <path d="M214 280 Q250 268 286 280 Q272 340 252 400 Q248 408 244 400 Q226 340 214 280 Z" fill="#fbf6ec"/>   <!-- occhi -->   <ellipse cx="208" cy="226" rx="17" ry="20" fill="#2a1d17"/>   <ellipse cx="292" cy="226" rx="17" ry="20" fill="#2a1d17"/>   <circle cx="214" cy="218" r="6" fill="#fff"/>   <circle cx="298" cy="218" r="6" fill="#fff"/>   <!-- sopracciglia buffe -->   <path d="M186 196 Q206 184 226 194" stroke="#b79f7c" stroke-width="7" fill="none" stroke-linecap="round"/>   <path d="M274 194 Q294 184 314 196" stroke="#b79f7c" stroke-width="7" fill="none" stroke-linecap="round"/>   <!-- naso -->   <path d="M234 396 Q250 384 266 396 Q262 414 250 418 Q238 414 234 396 Z" fill="#2a1d17"/>   </svg>';
+const PALLA_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-80 -80 160 160"><defs><radialGradient id="bb" cx=".38" cy=".35" r=".75"><stop offset="0" stop-color="#ff9a4d"/><stop offset="1" stop-color="#d9531e"/></radialGradient></defs><circle r="78" fill="url(#bb)"/><path d="M-78 0 H78 M0 -78 V78" stroke="#3a1a08" stroke-width="7"/><path d="M-55 -55 Q-20 0 -55 55 M55 -55 Q20 0 55 55" stroke="#3a1a08" stroke-width="7" fill="none"/></svg>';
+const ALTOPIANO_SVG = `<svg class="alp" viewBox="0 0 1440 400" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 300 L160 190 L260 250 L420 120 L560 230 L700 160 L860 260 L1000 150 L1140 230 L1280 170 L1440 240 L1440 400 L0 400Z" fill="#dfe7ee"/>
+  <path d="M420 120 L455 150 L438 147 L420 162 L404 146 L390 150Z M1000 150 L1030 176 L1015 173 L1000 186 L987 172 L974 176Z" fill="#fff"/>
+  <path d="M0 340 L120 280 L260 330 L380 260 L540 330 L680 270 L820 340 L980 280 L1120 340 L1280 290 L1440 330 L1440 400 L0 400Z" fill="#cfdbe5"/>
+  <path d="M0 370 L200 340 L420 372 L640 345 L860 375 L1080 348 L1300 372 L1440 355 L1440 400 L0 400Z" fill="#c2d3c1"/>
+</svg>`;
+const CARICAMENTI = [
+  'Sto stagionando i dati come un Asiago Stravecchio…',
+  'Salgo verso l\'Ortigara, un attimo…',
+  'Marla sta riportando i dati (forse)…',
+  'Controllo la nebbia sull\'Altopiano…',
+  'Carico i dati e una fetta di Asiago…'
+];
+const CALZINI = [
+  'Marla ha trovato un calzino… ora si sente libera 🧦',
+  'Marla approva con le orecchie 🐾',
+  'Salvato in cima al Verena ⛰️',
+  'Dato stagionato 24 mesi 🧀',
+  'Marla ha nascosto il backup sotto il divano'
+];
+let EGG = false;
+try { EGG = localStorage.getItem('agenda_egg') === '1'; } catch (_) {}
+const pick = a => a[Math.floor(Math.random() * a.length)];
+function okToast(msg){ toast(EGG && Math.random() < 0.3 ? msg + ' · ' + pick(CALZINI) : msg, EGG ? 3600 : 2600); }
+
+function saluto(){
+  const h = new Date().getHours();
+  if (h < 6) return 'Ancora sveglio? Anche Marla dorme da un pezzo 💤';
+  if (h < 10) return 'Buongiorno! Nebbia sull\'Altopiano, ma i dati sono limpidi ☕';
+  if (h < 14) return 'Mezzogiorno: ora perfetta per pane e Asiago 🧀';
+  if (h < 19) return 'Pomeriggio da allenamento: Marla scalda le zampe 🏀';
+  if (h < 23) return 'Sera: Marla aspetta il POST sul divano 🛋️';
+  return 'Ancora qui? Anche Marla dorme da un pezzo 💤';
+}
+function applicaEgg(){
+  document.body.classList.toggle('egg', EGG);
+  if (EGG && !document.querySelector('.alp')) document.body.insertAdjacentHTML('afterbegin', ALTOPIANO_SVG);
+  const b = $('#eggBtn'); if (b) b.classList.toggle('on', EGG);
+  const sl = $('#saluto'); if (sl) sl.textContent = EGG ? saluto() : '';
+}
+function toggleEgg(){
+  EGG = !EGG;
+  try { localStorage.setItem('agenda_egg', EGG ? '1' : '0'); } catch (_) {}
+  applicaEgg();
+  if (D) render();
+  toast(EGG ? 'Modalità Marla attivata 🐾 · prova a scrivere "marla"' : 'Modalità Marla in cuccia 💤', 3600);
+  if (EGG) setTimeout(spunta, 500);
+}
+
+// Marla fa capolino dal basso
+function spunta(){
+  if (document.querySelector('.peek')) return;
+  const d = document.createElement('div'); d.className = 'peek'; d.innerHTML = MARLA_SVG;
+  document.body.appendChild(d);
+  requestAnimationFrame(() => requestAnimationFrame(() => d.classList.add('up')));
+  setTimeout(() => d.classList.remove('up'), 2200);
+  setTimeout(() => d.remove(), 2900);
+}
+let clickTitolo = [];
+function cliccaTitolo(){
+  if (!EGG) return;
+  const t = Date.now(); clickTitolo = clickTitolo.filter(x => t - x < 2000).concat(t);
+  if (clickTitolo.length >= 5) { clickTitolo = []; spunta(); }
+}
+
+// Scrivi "marla": corre per la pagina palleggiando
+function corsa(){
+  if (document.querySelector('.corsa')) return;
+  const d = document.createElement('div'); d.className = 'corsa';
+  d.innerHTML = `<div class="h">${MARLA_SVG}</div><div class="b">${PALLA_SVG}</div>`;
+  document.body.appendChild(d);
+  setTimeout(() => d.remove(), 4400);
+}
+let tasti = '';
+document.addEventListener('keydown', e => {
+  if (!EGG || e.target.matches('input, select, textarea')) return;
+  tasti = (tasti + (e.key || '').toLowerCase()).slice(-5);
+  if (tasti === 'marla') { tasti = ''; corsa(); }
+});
+
+// Tutti hanno fatto PRE e POST: timbro e pioggia di zampe
+const festeggiato = {};
+function controllaApprovazione(){
+  if (!EGG || !D || cur !== D.oggi || festeggiato[cur]) return;
+  const R = giorno(cur).R;
+  if (!R.length || !R.every(x => num(x.r.tqr) != null && (num(x.r.rpe) != null || ND.includes(x.r.disp)))) return;
+  festeggiato[cur] = true;
+  const t = document.createElement('div'); t.className = 'timbro';
+  t.innerHTML = 'Marla approva 🐾<small>Tutti hanno compilato PRE e POST</small>';
+  document.body.appendChild(t);
+  requestAnimationFrame(() => requestAnimationFrame(() => t.classList.add('show')));
+  for (let i = 0; i < 26; i++) {
+    const z = document.createElement('div'); z.className = 'zampa'; z.textContent = pick(['🐾', '🐾', '🏀', '🧀']);
+    z.style.left = Math.random() * 100 + 'vw'; z.style.animationDuration = (2.2 + Math.random() * 2) + 's'; z.style.animationDelay = Math.random() * 1.2 + 's';
+    document.body.appendChild(z); setTimeout(() => z.remove(), 5000);
+  }
+  setTimeout(() => t.classList.remove('show'), 2600);
+  setTimeout(() => t.remove(), 3200);
 }
 
 start();
