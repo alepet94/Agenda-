@@ -164,6 +164,9 @@ const LOGO_5IN = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAUDBAQ
 const poweredBy = () => `<footer class="pw">Powered by <img src="${LOGO_5IN}" alt="5IN"></footer>`;
 // Indirizzo della pagina atleti: se staff.html e atleta.html stanno nella stessa cartella online, lascia così.
 const ATLETA_URL = new URL('atleta.html', location.href).href;
+// 'staff' = preparatore (modifica tutto) · 'allenatore' = sola lettura
+const MODO = 'staff';
+const RO = MODO === 'allenatore';
 /* ======================================================================== */
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -213,15 +216,17 @@ async function doLogin(e){
   enter();
 }
 async function enter(){
-  const { data: ok } = await sb.rpc('is_staff');
-  if (!ok) { await sb.auth.signOut(); return showLogin('Questo account non è abilitato come staff.'); }
+  let { data: ruolo, error: eR } = await sb.rpc('ruolo_utente');
+  if (eR) { const r = await sb.rpc('is_staff'); ruolo = r.data ? 'staff' : null; }
+  if (RO ? !ruolo : ruolo !== 'staff') { await sb.auth.signOut(); return showLogin(RO ? 'Questo account non è abilitato alla vista allenatore.' : 'Questo account non è abilitato come staff.'); }
+  if (RO) EGG = false;
   $('#root').innerHTML = `<div class="wrap"><header>
     <div><div class="teams" id="teams"></div>
-      <div class="hrow"><h1 id="titolo">Agenda · Staff</h1><button class="eggbtn${EGG ? ' on' : ''}" id="eggBtn" onclick="toggleEgg()" title="Modalità Marla">🐾</button></div>
-      <div class="saluto" id="saluto"></div></div>
+      <div class="hrow"><h1 id="titolo">Agenda · ${RO ? 'Allenatore' : 'Staff'}</h1>${RO ? '' : `<button class="eggbtn${EGG ? ' on' : ''}" id="eggBtn" onclick="toggleEgg()" title="Modalità Marla">🐾</button>`}</div>
+      <div class="saluto" id="saluto">${RO ? '<span style="color:var(--mute)">👁 Vista in sola lettura</span>' : ''}</div></div>
     <nav>
       <button data-v="giorno" class="on">Giornata</button><button data-v="squadra">Carichi</button>
-      <button data-v="prog">Programmazione</button><button data-v="atleti">Atleti</button>
+      <button data-v="prog">Programmazione</button>${RO ? '' : '<button data-v="atleti">Atleti</button>'}
       <button data-v="report">Report PDF</button><button data-v="esci">Esci</button>
     </nav></header><div id="app"><div class="loading">Caricamento dati…</div></div>${poweredBy()}</div>`;
   document.querySelectorAll('nav button').forEach(b => b.onclick = async () => {
@@ -238,7 +243,13 @@ async function load(){
   if (EGG && !D) { const l = $('#app .loading'); if (l) l.textContent = pick(CARICAMENTI); }
   const oggi = iso(new Date());
   const da = addDays(oggi, -150);
-  const [a, p, g, ps, sq, as] = await Promise.all([
+  let a, p, g, ps, sq, as;
+  if (RO) {
+    const r = await sb.rpc('dati_allenatore', { p_da: da });
+    if (r.error) { $('#app').innerHTML = `<div class="loading">Errore: ${esc(r.error.message)}</div>`; return; }
+    a = { data: r.data.atleti }; p = { data: r.data.programmazione }; g = { data: r.data.giornaliero };
+    ps = { data: [] }; sq = { data: r.data.squadre }; as = { data: r.data.atleta_squadre };
+  } else [a, p, g, ps, sq, as] = await Promise.all([
     sb.from('atleti').select('*').order('id'),
     sb.from('programmazione').select('*'),
     sb.from('v_giornaliero').select('*').gte('data', da).order('data'),
@@ -246,7 +257,7 @@ async function load(){
     sb.from('squadre').select('*').order('ordine'),
     sb.from('atleta_squadre').select('*')
   ]);
-  const err = a.error || p.error || g.error || sq.error || as.error;
+  const err = !RO && (a.error || p.error || g.error || sq.error || as.error);
   if (err) { $('#app').innerHTML = `<div class="loading">Errore: ${esc(err.message)}</div>`; return; }
   const righe = g.data.map(r => ({
     data: r.data, id: r.atleta_id, tqr: r.tqr, sonnoQ: r.sonno_q, sonnoH: num(r.sonno_h), doms: r.doms, stress: r.stress, disp: r.disp,
@@ -258,7 +269,7 @@ async function load(){
   const membriSq = {}, princ = {};
   as.data.forEach(m => { (membriSq[m.squadra_id] = membriSq[m.squadra_id] || new Set()).add(m.atleta_id); if (m.principale) princ[m.atleta_id] = m.squadra_id; });
   const push = new Set((ps.data || []).map(x => x.atleta_id));
-  D = { oggi, atleti: a.data.map(x => Object.assign(x, { link: ATLETA_URL + '?a=' + encodeURIComponent(x.id) + '&t=' + x.token })), righe, idx, prog, push,
+  D = { oggi, atleti: a.data.map(x => Object.assign(x, { link: RO ? '' : ATLETA_URL + '?a=' + encodeURIComponent(x.id) + '&t=' + x.token })), righe, idx, prog, push,
         squadre: sq.data, membri: membriSq, princ };
   if (!D.squadre.some(x => x.id === SQ)) SQ = (D.squadre[0] || { id: 'U19' }).id;
   if (!cur) cur = oggi;
@@ -362,16 +373,16 @@ function vGiorno(){
   ${pannelloPost(G)}
   <div class="panel">
     <div class="ph"><h2>Atleti</h2>
-      <div class="row"><label>Minuti a tutti i disponibili</label>
+      ${RO ? '' : `<div class="row"><label>Minuti a tutti i disponibili</label>
         <input class="num" id="bW" placeholder="W" inputmode="numeric"><input class="num" id="bV" placeholder="V" inputmode="numeric">
         <input class="num" id="bTP" placeholder="TP" inputmode="numeric"><input class="num" id="bG" placeholder="G" inputmode="numeric">
-        <button class="btn acc" onclick="bulk()">Applica</button></div>
+        <button class="btn acc" onclick="bulk()">Applica</button></div>`}
     </div>
     <div class="scroll"><table>
       <tr><th>Atleta</th><th>PRE</th><th>POST</th><th>Disponibilità</th><th>TQR</th><th>Sonno</th><th>Ore</th><th>DOMS</th><th>Stress</th>
           <th>W</th><th>V</th><th>TP</th><th>G</th><th>Tot</th><th>RPE</th><th>AU</th></tr>
-      ${G.R.map(({ a, r }) => `<tr class="click" onclick="edit('${esc(a.id)}')">
-        <td class="nm">${esc(a.nome)}${doppio(a.id) ? sqTag(squadreDi(a.id).find(x => x !== SQ), 'anche ') : ''}<small>${esc(a.id)}${r.staff_at ? ' · modificato dallo staff' : ''}${r.nota ? ' · 📝 nota' : ''}</small></td>
+      ${G.R.map(({ a, r }) => `<tr${RO ? '' : ` class="click" onclick="edit('${esc(a.id)}')"`}>
+        <td class="nm">${esc(a.nome)}${doppio(a.id) ? sqTag(squadreDi(a.id).find(x => x !== SQ), 'anche ') : ''}<small>${esc(a.id)}${!RO && r.staff_at ? ' · modificato dallo staff' : ''}${r.nota ? ' · 📝 nota' : ''}</small></td>
         <td><span class="dot ${num(r.tqr) != null ? 'on' : ''}"></span></td>
         <td><span class="dot ${num(r.rpe) != null ? 'on' : ''}"></span></td>
         <td>${pill(r.disp)}</td>
@@ -392,12 +403,12 @@ function pannelloPost(G){
   return `<div class="panel"><div class="ph">
     <div><h2>${ap ? '🔓 POST aperto' : '🔒 POST chiuso'}</h2>
       <div class="sub" style="margin-top:4px">${ap
-        ? `Aperto alle ${ora} · mancano ${daFare.length} POST (${conNotifica} con notifiche attive)`
+        ? `Aperto alle ${ora} · mancano ${daFare.length} POST${RO ? '' : ` (${conNotifica} con notifiche attive)`}`
         : passato ? 'Giornata passata: gli atleti possono compilare solo oggi e ieri.'
         : G.p.tipo === 'RIPOSO' ? 'Giornata di riposo: nessuna notifica automatica.'
-        : G.p.fine ? `Allenamento ${G.p.inizio || '?'}–${G.p.fine}: si apre da solo alle <b>${autoPost(G.p.fine)}</b> e avvisa i presenti. Puoi anche aprirlo prima.`
-        : 'Imposta l\'orario in Programmazione per l\'apertura automatica, oppure aprilo tu a fine allenamento.'}</div></div>
-    <div class="row">${ap
+        : G.p.fine ? `Allenamento ${G.p.inizio || '?'}–${G.p.fine}: si apre da solo alle <b>${autoPost(G.p.fine)}</b>${RO ? '.' : ' e avvisa i presenti. Puoi anche aprirlo prima.'}`
+        : RO ? 'Il POST si apre a fine allenamento.' : 'Imposta l\'orario in Programmazione per l\'apertura automatica, oppure aprilo tu a fine allenamento.'}</div></div>
+    <div class="row">${RO ? '' : ap
       ? `<button class="btn ghost" onclick="avvisaPost()" ${daFare.length ? '' : 'disabled'}>Avvisa di nuovo</button><button class="btn ghost" onclick="apriPost(false)">Richiudi</button>`
       : `<button class="btn acc" onclick="apriPost(true)" ${passato ? 'disabled' : ''}>Apri POST e avvisa gli atleti</button>`}</div>
   </div></div>`;
@@ -405,6 +416,7 @@ function pannelloPost(G){
 const sqTag = (id, pre) => `<span class="sqtag" style="background:${COL_SQ[id] || '#6b6f78'}">${pre || ''}${esc(id)}</span>`;
 const autoPost = f => { const [h, m] = f.split(':').map(Number), x = h * 60 + m - 20; return String(Math.floor(x / 60)).padStart(2, '0') + ':' + String(x % 60).padStart(2, '0'); };
 async function apriPost(aperto){
+  if (RO) return;
   const { error } = await sb.rpc('apri_post', { p_data: cur, p_squadra: SQ, p_aperto: aperto });
   if (error) return toast('Errore: ' + error.message);
   if (!aperto) { toast('POST richiuso'); return load(); }
@@ -425,6 +437,7 @@ async function avvisaPost(primaVolta){
 }
 
 async function bulk(){
+  if (RO) return;
   const v = { w: $('#bW').value, v: $('#bV').value, tp: $('#bTP').value, g: $('#bG').value };
   const cols = { w: 'min_w', v: 'min_v', tp: 'min_tp', g: 'min_g' };
   const keys = Object.keys(v).filter(k => v[k] !== '');
@@ -439,6 +452,7 @@ async function bulk(){
 
 /* ---------- drawer modifica ---------- */
 function edit(id){
+  if (RO) return;
   const a = D.atleti.find(x => x.id === id), r = row(cur, id) || {};
   const f = (k, l, step) => `<div class="fld"><label>${l}</label><input type="number" inputmode="decimal" step="${step || 1}" id="f_${k}" value="${r[k] ?? ''}"></div>`;
   const opts = ['', 'Disponibile', 'Disponibile con limitazioni', 'Infortunato', 'Ammalato'];
@@ -462,6 +476,7 @@ function edit(id){
 }
 function closeDr(){ $('#drawer').innerHTML = ''; }
 async function saveDr(id){
+  if (RO) return;
   const map = { tqr: 'tqr', sonnoQ: 'sonno_q', sonnoH: 'sonno_h', doms: 'doms', stress: 'stress', w: 'min_w', v: 'min_v', tp: 'min_tp', g: 'min_g', rpe: 'rpe' };
   const o = { data: cur, atleta_id: id };
   Object.keys(map).forEach(k => { const v = $('#f_' + k).value; o[map[k]] = v === '' ? null : +v; });
@@ -514,7 +529,7 @@ function vProg(){
   const lun = lunedi(cur), days = [...Array(14)].map((_, i) => addDays(lun, i));
   $('#app').innerHTML = `
   ${datebar('Settimane dal ' + dLabel(lun, { day: 'numeric', month: 'long' }) + ' · ' + esc(nomeSq(SQ)), 7)}
-  <div class="panel"><div class="ph"><h2>Programmazione ${esc(SQ)}</h2><span class="sub">Tocca <b>Giocatori</b> per impostare W / V / TP / G di ognuno e con quale squadra si allena chi fa doppio campionato</span></div>
+  <div class="panel"><div class="ph"><h2>Programmazione ${esc(SQ)}</h2><span class="sub">${RO ? 'Tocca <b>Giocatori</b> per vedere W / V / TP / G previsti per ognuno' : 'Tocca <b>Giocatori</b> per impostare W / V / TP / G di ognuno e con quale squadra si allena chi fa doppio campionato'}</span></div>
   <div class="scroll"><table><tr><th>Giorno</th><th>Tipo</th><th>Inizio</th><th>Fine</th><th>RPE obiettivo</th><th>Giocatori</th><th>RPE medio</th><th>Diff.</th><th></th></tr>
   ${days.map(k => { const p = P(k); const G = giorno(k);
     const m = avg(G.R.map(x => num(x.r.rpe)).filter(v => v != null));
@@ -522,16 +537,18 @@ function vProg(){
     const prog = G.R.filter(x => num(x.r.tot) != null).length;
     const ospiti = G.A.filter(a => !(D.princ[a.id] === SQ)).length;
     return `<tr><td class="nm">${cap(dLabel(k, { weekday: 'short', day: 'numeric', month: 'short' }))}</td>
+      ${RO ? `<td><b>${esc(p.tipo || '–')}</b></td><td>${p.inizio || '–'}</td><td>${p.fine || '–'}</td><td>${p.rpe ?? '–'}</td>` : `
       <td><select id="t_${k}"><option></option>${TIPI.map(t => `<option ${t === p.tipo ? 'selected' : ''}>${t}</option>`).join('')}</select></td>
       <td><input type="time" id="i_${k}" value="${p.inizio || ''}"></td>
       <td><input type="time" id="f_${k}" value="${p.fine || ''}" title="Il POST si apre da solo 20' prima"></td>
-      <td><input class="num" type="number" min="0" max="10" step="0.5" id="r_${k}" value="${p.rpe ?? ''}"></td>
+      <td><input class="num" type="number" min="0" max="10" step="0.5" id="r_${k}" value="${p.rpe ?? ''}"></td>`}
       <td><button class="btn ghost" onclick="pianifica('${k}')">${prog ? prog + '/' + G.A.length : G.A.length} giocatori ›</button>${ospiti ? '<br><small class="muted">' + ospiti + ' da altra squadra</small>' : ''}</td>
       <td>${fmtN(m, 1)}</td><td>${df == null ? '–' : `<span class="c ${Math.abs(df) > 1.5 ? 'r' : Math.abs(df) > 0.75 ? 'y' : 'g'}">${df >= 0 ? '+' : ''}${fmtN(df, 1)}</span>`}</td>
-      <td><button class="btn ghost" onclick="saveProg('${k}')">Salva</button></td></tr>`; }).join('')}
+      <td>${RO ? '' : `<button class="btn ghost" onclick="saveProg('${k}')">Salva</button>`}</td></tr>`; }).join('')}
   </table></div></div>`;
 }
 async function saveProg(k){
+  if (RO) return;
   const t = $('#t_' + k).value || null, r = $('#r_' + k).value, i = $('#i_' + k).value || null, f = $('#f_' + k).value || null;
   const { error } = await sb.from('programmazione').upsert({ data: k, squadra: SQ, tipo: t, rpe_obiettivo: r === '' ? null : +r, ora_inizio: i, ora_fine: f }, { onConflict: 'data,squadra' });
   if (error) return toast('Errore: ' + error.message);
@@ -540,7 +557,22 @@ async function saveProg(k){
 
 // Pianificazione del giorno: minuti per giocatore e squadra (doppio campionato)
 const MIN = [['w', 'min_w', 'W', 'Weights'], ['v', 'min_v', 'V', 'Vitamins'], ['tp', 'min_tp', 'TP', 'Team practice'], ['g', 'min_g', 'G', 'Game']];
+function pianificaRO(k){
+  const p = P(k), G = giorno(k);
+  $('#drawer').innerHTML = `<div class="ov" onclick="if(event.target===this)closeDr()"><div class="dr wide">
+    <div class="sub">${esc(nomeSq(SQ))} · ${esc(p.tipo || 'giornata non programmata')}${p.inizio ? ' · ' + p.inizio + '–' + (p.fine || '?') : ''}</div>
+    <h3>${cap(dLabel(k))}</h3>
+    <div class="sub" style="margin-top:6px">Minuti previsti: W = Weights · V = Vitamins · TP = Team practice · G = Game</div>
+    <div class="scroll" style="margin-top:14px"><table class="pl">
+      <tr><th>Giocatore</th>${MIN.map(m => `<th title="${m[3]}">${m[2]}</th>`).join('')}<th>Tot</th><th>Disponibilità</th></tr>
+      ${G.R.map(({ a, r }) => `<tr><td class="nm">${esc(a.nome)}${doppio(a.id) ? sqTag(squadreDi(a.id).find(x => x !== SQ), 'anche ') : ''}</td>
+        ${MIN.map(m => `<td>${num(r[m[0]]) ?? '<span class="muted">–</span>'}</td>`).join('')}<td><b>${num(r.tot) ?? '–'}</b></td><td>${pill(r.disp)}</td></tr>`).join('')}
+    </table></div>
+    <div style="margin-top:18px"><button class="btn ghost" onclick="closeDr()">Chiudi</button></div>
+  </div></div>`;
+}
 function pianifica(k){
+  if (RO) return pianificaRO(k);
   const p = P(k);
   const lista = membri().sort((a, b) => (doppio(a.id) - doppio(b.id)) || a.nome.localeCompare(b.nome));
   $('#drawer').innerHTML = `<div class="ov" onclick="if(event.target===this)closeDr()"><div class="dr wide">
@@ -574,6 +606,7 @@ function copiaTutti(){
       const i = tr.querySelector(`input[data-k=${m[0]}]`); i.value = v; totRiga(i); }); });
 }
 async function salvaPiano(k){
+  if (RO) return;
   const rows = [...document.querySelectorAll('.pl tr[data-id]')].map(tr => {
     const o = { data: k, atleta_id: tr.dataset.id };
     const sel = tr.querySelector('select[data-k=sq]');
@@ -818,7 +851,7 @@ function applicaEgg(){
   document.body.classList.toggle('egg', EGG);
   if (EGG && !document.querySelector('.alp')) document.body.insertAdjacentHTML('afterbegin', ALTOPIANO_SVG);
   const b = $('#eggBtn'); if (b) b.classList.toggle('on', EGG);
-  const sl = $('#saluto'); if (sl) sl.textContent = EGG ? saluto() : '';
+  const sl = $('#saluto'); if (sl && !RO) sl.textContent = EGG ? saluto() : '';
 }
 function toggleEgg(){
   EGG = !EGG;
