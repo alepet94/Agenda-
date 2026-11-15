@@ -120,6 +120,9 @@
   .mins span b{font-weight:800}
   .gg .vuoto{font-size:13px;color:var(--mute);margin-top:4px}
   .gg .orario{font-size:17px;font-weight:800;margin-top:6px;letter-spacing:-.01em}
+  .gg .ev + .ev{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+  .gg .luogo{font-size:13.5px;font-weight:600;color:var(--mute);margin-top:2px}
+  .gg .vs{font-weight:800;font-size:14px}
   .gg .nota{margin-top:10px;background:#fbefd2;border-left:3px solid var(--oro, #d4a73a);border-radius:0 10px 10px 0;padding:8px 10px;font-size:13.5px;line-height:1.4;white-space:pre-line}
   .gg .nota b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#7a5a12;margin-bottom:2px}
   /* ---------- TEMA ORO E GRANATA ---------- */
@@ -441,14 +444,17 @@ function renderCal(c){
   $('calPrev').disabled = calDa <= addG(lunOggi, -28);
   $('calNext').disabled = calDa >= addG(lunOggi, 28);
   $('calBody').innerHTML = c.giorni.map(g => {
-    const t = TIPO[g.tipo];
     const cls = g.data === oggi ? ' oggi' : g.data < oggi ? ' passato' : '';
-    const sq = c.doppio && g.squadra ? `<span class="bdg" style="background:${COL_SQ[g.squadra] || '#6b6f78'}">${g.squadra}</span>` : '';
+    const ev = g.eventi || [];
     let corpo;
-    if (!g.tipo) corpo = `<div class="tp">${sq}</div><div class="vuoto">Non ancora programmato</div>`;
-    else if (g.tipo === 'RIPOSO') corpo = `<div class="tp"><span class="bdg" style="background:${t[1]}">Riposo</span>${sq}</div><div class="vuoto">Giornata libera: recupera bene 💤</div>`;
-    else corpo = `<div class="tp"><span class="bdg" style="background:${t[1]}">${t[0]}</span>${sq}</div>
-      <div class="orario">${g.inizio ? `🕒 ${g.inizio}${g.fine ? ' – ' + g.fine : ''}` : '<span class="vuoto">Orario da definire</span>'}</div>`;
+    if (ev.length) corpo = ev.map(e => {
+      const t = TIPO[e.tipo] || ['', '#6b6f78'];
+      const sq = c.doppio ? `<span class="bdg" style="background:${COL_SQ[e.squadra] || '#6b6f78'}">${esc(e.squadra)}</span>` : '';
+      return `<div class="ev"><div class="tp"><span class="bdg" style="background:${t[1]}">${t[0]}</span>${sq}${e.tipo === 'GARA' && e.avversario ? `<span class="vs">vs ${esc(e.avversario)}</span>` : ''}</div>
+        <div class="orario">${e.inizio ? `🕒 ${e.inizio}${e.fine ? ' – ' + e.fine : ''}` : '<span class="vuoto">Orario da definire</span>'}</div>
+        ${e.luogo ? `<div class="luogo">📍 ${esc(e.luogo)}</div>` : ''}</div>`; }).join('');
+    else if (g.riposo) corpo = `<div class="tp"><span class="bdg" style="background:${TIPO.RIPOSO[1]}">Riposo</span></div><div class="vuoto">Giornata libera: recupera bene 💤</div>`;
+    else corpo = `<div class="vuoto" style="margin-top:2px">Nessun impegno programmato</div>`;
     const nota = g.nota ? `<div class="nota"><b>📝 Nota del preparatore</b>${esc(g.nota)}</div>` : '';
     return `<div class="gg${cls}"><div class="dt"><small>${f(g.data, { weekday: 'short' }).replace('.', '')}</small><b>${f(g.data, { day: 'numeric' })}</b></div><div class="bd">${corpo}${nota}</div></div>`;
   }).join('');
