@@ -202,6 +202,12 @@
   </section>
 
   <!-- ATTESA: PRE fatto, POST non ancora aperto -->
+  <section id="libero" class="hidden card wait-box">
+    <div class="big" id="liberoIc">💤</div>
+    <div class="q" id="liberoTxt">Oggi riposo</div>
+    <div class="hint" style="justify-content:center;margin-top:6px">Niente PRE e POST da compilare. Recupera bene!</div>
+  </section>
+
   <section id="wait" class="hidden card wait-box">
     <div class="big">⏳</div>
     <div class="q">PRE inviato, buon allenamento!</div>
@@ -312,7 +318,10 @@ function renderDays(){
 }
 
 /* Fase della giornata: pre → attesa → post → fatto */
+// giorno senza attività (riposo o niente in programma): niente PRE/POST da compilare
+const libero = st => st.attivita === false && !st.pre;
 function fase(st){
+  if (libero(st)) return 'libero';
   if (!st.pre) return 'pre';
   if (ND.includes(st.disp)) return 'done';
   if (st.post) return 'done';
@@ -323,10 +332,11 @@ function render(){
   const nd = ND.includes(st.disp);
   const step = (cls, k, t, s) => `<div class="step ${cls}"><div class="k">${k}</div><div class="t">${t}</div><div class="s">${s}</div></div>`;
   $('steps').innerHTML =
-    step(st.pre ? 'ok' : 'now', 'Prima', 'PRE', st.pre ? 'Compilato ✓' : 'Da compilare') +
+    step(st.pre ? 'ok' : f === 'libero' ? 'lock' : 'now', 'Prima', 'PRE', st.pre ? 'Compilato ✓' : f === 'libero' ? 'Non richiesto' : 'Da compilare') +
     step(st.post ? 'ok' : f === 'post' ? 'now' : 'lock', 'Dopo', 'POST',
-      st.post ? 'Compilato ✓' : nd ? 'Non richiesto' : st.post_aperto ? 'Da compilare' : '🔒 A fine allenamento');
-  ['pre', 'wait', 'post', 'done'].forEach(x => $(x).classList.toggle('hidden', x !== f));
+      st.post ? 'Compilato ✓' : (nd || f === 'libero') ? 'Non richiesto' : st.post_aperto ? 'Da compilare' : '🔒 A fine allenamento');
+  ['pre', 'wait', 'post', 'done', 'libero'].forEach(x => $(x).classList.toggle('hidden', x !== f));
+  if (f === 'libero') { $('liberoIc').textContent = st.riposo ? '💤' : '📅'; $('liberoTxt').textContent = st.riposo ? 'Giornata di riposo' : 'Nessun impegno in programma'; }
   if (f === 'done') {
     $('doneTxt').textContent = nd ? 'PRE inviato · ' + fmt(day) : 'Giornata completa · ' + fmt(day);
     $('doneSub').textContent = nd ? 'Sei segnato come ' + st.disp.toLowerCase() + ': il POST non serve. Rimettiti presto!' : 'PRE e POST inviati. Grazie!';
@@ -341,7 +351,7 @@ let vista = 'q', vistaManuale = false, ultimaFase = null;
 function applicaVista(st, f){
   const q = vista === 'q' || !calCaricato;
   ['days', 'steps'].forEach(id => $(id).classList.toggle('hidden', !q));
-  if (!q) ['pre', 'wait', 'post', 'done'].forEach(x => $(x).classList.add('hidden'));
+  if (!q) ['pre', 'wait', 'post', 'done', 'libero'].forEach(x => $(x).classList.add('hidden'));
   $('cal').classList.toggle('hidden', q || !calCaricato);
   const b = $('vistaBtn'); b.classList.toggle('hidden', !calCaricato);
   const daFare = f === 'pre' || f === 'post';
@@ -351,8 +361,9 @@ function applicaVista(st, f){
   const nd = ND.includes(st.disp);
   const pill = (cls, t, go) => `<span class="${cls}"${go ? ' onclick="cambiaVista()"' : ''}>${t}</span>`;
   $('calStato').innerHTML = `<div class="stato">
+      ${f === 'libero' ? pill('lock', st.riposo ? '💤 Oggi riposo: niente PRE/POST' : 'Oggi nessun impegno: niente PRE/POST') : `
       ${st.pre ? pill('ok', 'PRE ✓') : pill('go', 'PRE da compilare ›', true)}
-      ${st.post ? pill('ok', 'POST ✓') : nd ? pill('lock', 'POST non richiesto') : st.post_aperto ? pill('go', 'POST da compilare ›', true) : pill('lock', '🔒 POST a fine allenamento')}
+      ${st.post ? pill('ok', 'POST ✓') : nd ? pill('lock', 'POST non richiesto') : st.post_aperto ? pill('go', 'POST da compilare ›', true) : pill('lock', '🔒 POST a fine allenamento')}`}
     </div>${!st.post && !nd && st.pre ? '<div class="notifBox"></div>' : ''}`;
 }
 function cambiaVista(){
