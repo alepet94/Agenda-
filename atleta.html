@@ -120,6 +120,7 @@
   .mins span b{font-weight:800}
   .gg .vuoto{font-size:13px;color:var(--mute);margin-top:4px}
   .gg .orario{font-size:17px;font-weight:800;margin-top:6px;letter-spacing:-.01em}
+  .riposo-info{font-size:14.5px;line-height:1.45;background:#fbefd2;border-color:#ecd59a}
   .gg .ev + .ev{margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
   .gg .luogo{font-size:13.5px;font-weight:600;color:var(--mute);margin-top:2px}
   .gg .vs{font-weight:800;font-size:14px}
@@ -178,6 +179,7 @@
 
   <!-- PRE -->
   <section id="pre" class="hidden">
+    <div class="card riposo-info hidden" id="preRiposo">😴 <b>Oggi riposo</b>: compila solo il PRE, ci vuole un minuto. Il POST oggi non serve.</div>
     <div class="card"><div class="q">Quanto ti senti recuperato? (TQR)</div>
       <div class="hint"><span>1 per niente</span><span>10 del tutto</span></div>
       <div class="scale s10" data-k="tqr" data-n="1-10"></div></div>
@@ -203,9 +205,9 @@
 
   <!-- ATTESA: PRE fatto, POST non ancora aperto -->
   <section id="libero" class="hidden card wait-box">
-    <div class="big" id="liberoIc">💤</div>
-    <div class="q" id="liberoTxt">Oggi riposo</div>
-    <div class="hint" style="justify-content:center;margin-top:6px">Niente PRE e POST da compilare. Recupera bene!</div>
+    <div class="big" id="liberoIc">🌿</div>
+    <div class="q" id="liberoTxt">Goditi la giornata di riposo!</div>
+    <div class="hint" style="justify-content:center;margin-top:6px;line-height:1.5" id="liberoSub">PRE inviato, grazie. Oggi niente POST: ricarica le batterie, dormi bene e idratati. Ci vediamo al prossimo allenamento 💪</div>
   </section>
 
   <section id="wait" class="hidden card wait-box">
@@ -318,11 +320,11 @@ function renderDays(){
 }
 
 /* Fase della giornata: pre → attesa → post → fatto */
-// giorno senza attività (riposo o niente in programma): niente PRE/POST da compilare
-const libero = st => st.attivita === false && !st.pre;
+// giorno senza attività (riposo o niente in programma): il PRE si fa comunque, il POST no
+const libero = st => st.attivita === false;
 function fase(st){
-  if (libero(st)) return 'libero';
   if (!st.pre) return 'pre';
+  if (libero(st)) return 'libero';
   if (ND.includes(st.disp)) return 'done';
   if (st.post) return 'done';
   return st.post_aperto ? 'post' : 'wait';
@@ -332,11 +334,17 @@ function render(){
   const nd = ND.includes(st.disp);
   const step = (cls, k, t, s) => `<div class="step ${cls}"><div class="k">${k}</div><div class="t">${t}</div><div class="s">${s}</div></div>`;
   $('steps').innerHTML =
-    step(st.pre ? 'ok' : f === 'libero' ? 'lock' : 'now', 'Prima', 'PRE', st.pre ? 'Compilato ✓' : f === 'libero' ? 'Non richiesto' : 'Da compilare') +
+    step(st.pre ? 'ok' : 'now', 'Prima', 'PRE', st.pre ? 'Compilato ✓' : 'Da compilare') +
     step(st.post ? 'ok' : f === 'post' ? 'now' : 'lock', 'Dopo', 'POST',
-      st.post ? 'Compilato ✓' : (nd || f === 'libero') ? 'Non richiesto' : st.post_aperto ? 'Da compilare' : '🔒 A fine allenamento');
+      st.post ? 'Compilato ✓' : (nd || libero(st)) ? (libero(st) && st.riposo ? 'Riposo 🌿' : 'Non richiesto') : st.post_aperto ? 'Da compilare' : '🔒 A fine allenamento');
   ['pre', 'wait', 'post', 'done', 'libero'].forEach(x => $(x).classList.toggle('hidden', x !== f));
-  if (f === 'libero') { $('liberoIc').textContent = st.riposo ? '💤' : '📅'; $('liberoTxt').textContent = st.riposo ? 'Giornata di riposo' : 'Nessun impegno in programma'; }
+  $('preRiposo').classList.toggle('hidden', !libero(st));
+  if (libero(st)) $('preRiposo').innerHTML = st.riposo ? '😴 <b>Oggi riposo</b>: compila solo il PRE, ci vuole un minuto. Il POST oggi non serve.' : '📅 <b>Oggi nessun allenamento</b>: compila solo il PRE, ci vuole un minuto. Il POST oggi non serve.';
+  if (f === 'libero') {
+    $('liberoIc').textContent = st.riposo ? '🌿' : '😎';
+    $('liberoTxt').textContent = st.riposo ? 'Goditi la giornata di riposo!' : 'Goditi la giornata libera!';
+    $('liberoSub').textContent = 'PRE inviato, grazie. Oggi niente POST: ricarica le batterie, dormi bene e idratati. Ci vediamo al prossimo allenamento 💪';
+  }
   if (f === 'done') {
     $('doneTxt').textContent = nd ? 'PRE inviato · ' + fmt(day) : 'Giornata completa · ' + fmt(day);
     $('doneSub').textContent = nd ? 'Sei segnato come ' + st.disp.toLowerCase() + ': il POST non serve. Rimettiti presto!' : 'PRE e POST inviati. Grazie!';
@@ -361,10 +369,10 @@ function applicaVista(st, f){
   const nd = ND.includes(st.disp);
   const pill = (cls, t, go) => `<span class="${cls}"${go ? ' onclick="cambiaVista()"' : ''}>${t}</span>`;
   $('calStato').innerHTML = `<div class="stato">
-      ${f === 'libero' ? pill('lock', st.riposo ? '💤 Oggi riposo: niente PRE/POST' : 'Oggi nessun impegno: niente PRE/POST') : `
+      ${libero(st) ? (st.pre ? pill('ok', 'PRE ✓') + pill('lock', st.riposo ? '🌿 Riposo: niente POST' : 'Oggi niente POST') : pill('go', 'PRE da compilare ›', true) + pill('lock', st.riposo ? '🌿 Riposo: niente POST' : 'Oggi niente POST')) : `
       ${st.pre ? pill('ok', 'PRE ✓') : pill('go', 'PRE da compilare ›', true)}
       ${st.post ? pill('ok', 'POST ✓') : nd ? pill('lock', 'POST non richiesto') : st.post_aperto ? pill('go', 'POST da compilare ›', true) : pill('lock', '🔒 POST a fine allenamento')}`}
-    </div>${!st.post && !nd && st.pre ? '<div class="notifBox"></div>' : ''}`;
+    </div>${libero(st) && st.pre ? `<div class="notif on" style="margin-top:10px"><p>🌿 <b>${st.riposo ? 'Goditi la giornata di riposo!' : 'Goditi la giornata libera!'}</b> Ricarica le batterie, ci vediamo al prossimo allenamento 💪</p></div>` : ''}${!st.post && !nd && st.pre && !libero(st) ? '<div class="notifBox"></div>' : ''}`;
 }
 function cambiaVista(){
   vista = vista === 'q' ? 'cal' : 'q';
@@ -421,7 +429,7 @@ function sendPre(){
   rpc('invia_pre', Object.assign(pid(), { p_data: day, p_tqr: S.tqr, p_sonno_q: S.sonnoQ, p_sonno_h: S.sonnoH, p_doms: S.doms, p_stress: S.stress, p_disp: S.disp }))
     .then(() => {
       Object.assign(state.stato[day], { pre: true, disp: S.disp });
-      b.textContent = 'Invia PRE'; toast('PRE inviato'); vistaManuale = false; render(); window.scrollTo(0, 0);
+      b.textContent = 'Invia PRE'; toast('PRE inviato'); vistaManuale = libero(state.stato[day]); vista = 'q'; render(); window.scrollTo(0, 0);
     }).catch(e => { b.disabled = false; b.textContent = 'Invia PRE'; toast(e.message); });
 }
 function sendPost(){
