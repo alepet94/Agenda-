@@ -575,7 +575,7 @@ function vProg(){
     return `<div class="evday${oggi ? ' oggi' : ''}"><div class="evd"><b>${cap(dLabel(k, { weekday: 'short' }))}</b><span>${dLabel(k, { day: 'numeric', month: 'short' })}</span></div>
       <div class="evlist">${ev.map(e => `<button class="evcard t-${e.tipo}" onclick="${RO ? 'vediEvento' : 'editaEvento'}('${e.id}')">
           <div class="evt">${descrEvento(e)}</div>
-          <div class="evs">${e.tipo === 'RIPOSO' ? 'Tutta la squadra' : e.atleti.length + ' convocati'}${e.rpe != null ? ' · RPE obiettivo ' + fmtN(e.rpe, 1) : ''}${e.tipo !== 'RIPOSO' && e.atleti.some(id => !(D.membri[SQ] || new Set()).has(id)) ? ' · con ospiti' : ''}</div></button>`).join('')}
+          <div class="evs">${!RO && e.tipo !== 'RIPOSO' && !e.luogo ? '<b style="color:var(--warn)">⚠️ luogo mancante</b> · ' : ''}${e.tipo === 'RIPOSO' ? 'Tutta la squadra' : e.atleti.length + ' convocati'}${e.rpe != null ? ' · RPE obiettivo ' + fmtN(e.rpe, 1) : ''}${e.tipo !== 'RIPOSO' && e.atleti.some(id => !(D.membri[SQ] || new Set()).has(id)) ? ' · con ospiti' : ''}</div></button>`).join('')}
         ${RO ? (ev.length ? '' : '<span class="muted" style="padding:10px 0">–</span>') : `<button class="evadd" onclick="editaEvento(null,'${k}')">+ Evento</button>`}</div></div>`; }).join('')}</div></div>`;
 }
 
@@ -583,7 +583,9 @@ let EV = null; // evento in modifica
 function editaEvento(id, data){
   if (RO) return;
   const e = id ? D.eventi.find(x => x.id === id) : null;
-  EV = e ? JSON.parse(JSON.stringify(e)) : { id: null, data, squadra: SQ, tipo: 'ALLENAMENTO', inizio: '', fine: '', luogo: '', avversario: '', rpe: null, atleti: [] };
+  // per un nuovo evento propongo l'ultimo luogo usato da questa squadra
+  const ultimo = D.eventi.filter(x => x.squadra === SQ && x.luogo).sort((a, b) => b.data.localeCompare(a.data))[0];
+  EV = e ? JSON.parse(JSON.stringify(e)) : { id: null, data, squadra: SQ, tipo: 'ALLENAMENTO', inizio: '', fine: '', luogo: ultimo ? ultimo.luogo : '', avversario: '', rpe: null, atleti: [] };
   if (!e) { // nuovo evento: propongo chi non è già convocato quel giorno
     const occupati = new Set((D.evByDay[data] || []).filter(x => x.tipo !== 'RIPOSO').flatMap(x => x.atleti));
     EV.atleti = membri().filter(a => !occupati.has(a.id) && sqDi(a.id, data) === SQ).map(a => a.id);
