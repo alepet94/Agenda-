@@ -139,6 +139,9 @@
   .sqtag{display:inline-block;font-size:10.5px;font-weight:800;color:#fff;border-radius:6px;padding:1px 6px;margin-left:6px;vertical-align:1px}
   .chip{font:inherit;font-size:12px;font-weight:700;border:1.5px solid var(--line);background:var(--soft);color:var(--mute);border-radius:999px;padding:4px 10px;cursor:pointer;margin-right:4px}
   .chip.on{color:#fff;border-color:transparent}
+  .azioni{white-space:nowrap;text-align:right}
+  .btn.ico{width:38px;height:38px;padding:0;display:inline-flex;align-items:center;justify-content:center;vertical-align:middle}
+  .btn.ico.wa{color:#1f9d62}
   /* ---------- MODALITÀ MARLA (easter egg) ---------- */
   .eggbtn{border:1px solid var(--line);background:var(--card);border-radius:50%;width:38px;height:38px;font-size:18px;cursor:pointer;line-height:1;transition:transform .2s}
   .eggbtn.on{background:#1b2a3d;border-color:#1b2a3d;transform:rotate(-12deg)}
@@ -743,14 +746,16 @@ function vAtleti(){
     <td><input type="checkbox" ${a.attivo ? 'checked' : ''} onchange="setAttivo('${esc(a.id)}', this.checked)"></td>
     <td>${D.push.has(a.id) ? '<span class="pill p-ok"><i></i>Attive</span>' : '<span class="pill p-no">No</span>'}</td>
     <td style="text-align:left;max-width:320px;overflow:hidden;text-overflow:ellipsis" class="muted">${esc(a.link)}</td>
-    <td><button class="btn ghost" onclick="modificaAtleta('${esc(a.id)}')">✏️ Modifica</button>
-        <button class="btn ghost" onclick="copy('${esc(a.link)}')">Copia</button>
-        <a class="btn ghost" target="_blank" href="${wa(a, 'Ciao ' + a.nome.split(' ')[0] + '! Questo è il tuo link per il monitoraggio PRE/POST. Aprilo, aggiungilo alla schermata Home e attiva le notifiche: ti avviso io quando si apre il POST.')}">WhatsApp</a></td></tr>`).join('')}
+    <td class="azioni"><button class="btn ghost" onclick="copy('${esc(a.link)}')">Copia</button>
+        <a class="btn ghost ico wa" target="_blank" title="Manda il link su WhatsApp" aria-label="Manda il link su WhatsApp" href="${wa(a, 'Ciao ' + a.nome.split(' ')[0] + '! Questo è il tuo link per il monitoraggio PRE/POST. Aprilo, aggiungilo alla schermata Home e attiva le notifiche: ti avviso io quando si apre il POST.')}">${ICO_CHAT}</a>
+        <button class="btn ghost ico" title="Modifica atleta" aria-label="Modifica atleta" onclick="modificaAtleta('${esc(a.id)}')">${ICO_MATITA}</button></td></tr>`).join('')}
   </table></div></div>
   <div class="panel"><div class="ph"><h2>Nuovo atleta</h2></div><div class="pb row">
     <input id="nId" placeholder="ID (es. ROSSI)" style="text-transform:uppercase"><input id="nNome" placeholder="Nome e cognome">
     <span class="sub">Squadra: <b>${esc(SQ)}</b></span><button class="btn" onclick="nuovoAtleta()">Aggiungi</button></div></div>`;
 }
+const ICO_MATITA = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+const ICO_CHAT = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 3C6.9 3 3 6.6 3 11c0 2.3 1.1 4.4 2.9 5.9L5 21l4.3-2.2c.9.2 1.8.3 2.7.3 5.1 0 9-3.6 9-8s-3.9-8-9-8z"/></svg>';
 function modificaAtleta(id){
   if (RO) return;
   const a = D.atleti.find(x => x.id === id); if (!a) return;
