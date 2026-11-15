@@ -742,12 +742,58 @@ function vAtleti(){
     <td><input type="checkbox" ${a.attivo ? 'checked' : ''} onchange="setAttivo('${esc(a.id)}', this.checked)"></td>
     <td>${D.push.has(a.id) ? '<span class="pill p-ok"><i></i>Attive</span>' : '<span class="pill p-no">No</span>'}</td>
     <td style="text-align:left;max-width:320px;overflow:hidden;text-overflow:ellipsis" class="muted">${esc(a.link)}</td>
-    <td><button class="btn ghost" onclick="copy('${esc(a.link)}')">Copia</button>
+    <td><button class="btn ghost" onclick="modificaAtleta('${esc(a.id)}')">✏️ Modifica</button>
+        <button class="btn ghost" onclick="copy('${esc(a.link)}')">Copia</button>
         <a class="btn ghost" target="_blank" href="${wa(a, 'Ciao ' + a.nome.split(' ')[0] + '! Questo è il tuo link per il monitoraggio PRE/POST. Aprilo, aggiungilo alla schermata Home e attiva le notifiche: ti avviso io quando si apre il POST.')}">WhatsApp</a></td></tr>`).join('')}
   </table></div></div>
   <div class="panel"><div class="ph"><h2>Nuovo atleta</h2></div><div class="pb row">
     <input id="nId" placeholder="ID (es. ROSSI)" style="text-transform:uppercase"><input id="nNome" placeholder="Nome e cognome">
     <span class="sub">Squadra: <b>${esc(SQ)}</b></span><button class="btn" onclick="nuovoAtleta()">Aggiungi</button></div></div>`;
+}
+function modificaAtleta(id){
+  if (RO) return;
+  const a = D.atleti.find(x => x.id === id); if (!a) return;
+  const nDati = D.righe.filter(r => r.id === id).length;
+  $('#drawer').innerHTML = `<div class="ov" onclick="if(event.target===this)closeDr()"><div class="dr">
+    <div class="sub">Atleta · ${esc(a.id)}</div><h3>${esc(a.nome)}</h3>
+    <div class="fld" style="margin-top:16px"><label>Nome e cognome</label><input id="m_nome" maxlength="80" value="${esc(a.nome)}"></div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-weight:600"><input type="checkbox" id="m_attivo" ${a.attivo ? 'checked' : ''}> Attivo (riceve notifiche e compare nelle liste)</label>
+    <div class="sub" style="margin-top:10px">L'ID <b>${esc(a.id)}</b> non si può cambiare: è nel link personale dell'atleta. Le squadre si cambiano con i tasti U19 / U17 nella tabella.</div>
+    <div style="display:flex;gap:8px;margin-top:16px"><button class="btn" onclick="salvaAtleta('${esc(a.id)}')">Salva</button><button class="btn ghost" onclick="closeDr()">Annulla</button></div>
+
+    <div class="sec" style="margin-top:28px">Link personale</div>
+    <div class="sub" style="margin-top:6px">Se il link è finito alla persona sbagliata puoi crearne uno nuovo: quello vecchio smette subito di funzionare e va rimandato all'atleta.</div>
+    <button class="btn ghost" style="margin-top:10px" onclick="nuovoLink('${esc(a.id)}')">🔄 Crea nuovo link</button>
+
+    <div class="sec" style="margin-top:28px;color:var(--bad)">Elimina atleta</div>
+    <div class="sub" style="margin-top:6px">Cancella per sempre l'atleta e <b>tutti i suoi dati</b> (${nDati} giornate registrate, convocazioni, notifiche). Non si può annullare. Se ha solo lasciato la squadra, è meglio togliere la spunta "Attivo": i dati restano nei report.</div>
+    <button class="btn ghost" style="margin-top:10px;color:var(--bad);border-color:var(--badb)" onclick="eliminaAtleta('${esc(a.id)}')">🗑 Elimina definitivamente</button>
+  </div></div>`;
+}
+async function salvaAtleta(id){
+  if (RO) return;
+  const nome = $('#m_nome').value.trim();
+  if (!nome) return toast('Il nome non può essere vuoto');
+  const { error } = await sb.from('atleti').update({ nome, attivo: $('#m_attivo').checked }).eq('id', id);
+  if (error) return toast('Errore: ' + error.message);
+  okToast('Atleta aggiornato'); closeDr(); load();
+}
+async function nuovoLink(id){
+  if (RO || !confirm('Creare un nuovo link? Quello attuale smetterà di funzionare.')) return;
+  const b = crypto.getRandomValues(new Uint8Array(9)), token = [...b].map(x => x.toString(16).padStart(2, '0')).join('');
+  const { error } = await sb.from('atleti').update({ token }).eq('id', id);
+  if (error) return toast('Errore: ' + error.message);
+  toast('Nuovo link creato: ricordati di mandarlo all\'atleta', 4000); closeDr(); load();
+}
+async function eliminaAtleta(id){
+  if (RO) return;
+  const a = D.atleti.find(x => x.id === id);
+  const conferma = prompt(`Per eliminare definitivamente ${a.nome} e tutti i suoi dati scrivi il suo ID: ${id}`);
+  if (conferma === null) return;
+  if (conferma.trim().toUpperCase() !== id) return toast('ID non corrispondente: atleta NON eliminato');
+  const { error } = await sb.from('atleti').delete().eq('id', id);
+  if (error) return toast('Errore: ' + error.message);
+  toast(a.nome + ' eliminato'); closeDr(); load();
 }
 async function setAttivo(id, v){
   const { error } = await sb.from('atleti').update({ attivo: v }).eq('id', id);
